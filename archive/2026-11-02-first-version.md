@@ -11,3 +11,4 @@ Built in one session, started from the Clocked In folder and moved here.
 - Install script, speech check script, 30 unit tests, pre-commit hook, CI.
 - First real test by Jude failed: the 🌐 key's extra key press (179) cancelled every double tap. Fixed, with tests from the real timings in the log; Jude confirmed it works.
 - Added Murmur's own log (Log.swift).
+- Same way of working as Clocked In: docs/working-with-jude.md, a how-it-works section in docs/architecture.md, rules tests (SPEC sections, no em dashes), and Claude memory for keeping docs current, keeping things light and iPhone builds.

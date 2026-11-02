@@ -4,7 +4,7 @@
 
 A Mac menu bar app for dictation: a free replacement for Wispr Flow and for Apple's own dictation, which Jude found missed too much of what they said. Double-tap Fn to start listening, double-tap Fn again to stop, and the text appears wherever the cursor is, in any app. Speech turns into text on the Mac itself, with NVIDIA's Parakeet model (the Bark 3.0 Clean version, which drops "um", false starts and repeated words). Nothing leaves the Mac.
 
-Built for one person: Jude, on an M3 MacBook Air with 16 GB, macOS 26. Not for sale or the App Store.
+Built for one person: Jude, on an M3 MacBook Air with 16 GB, macOS 26. Not for sale or the App Store. Jude is not a coder: read docs/working-with-jude.md before replying.
 
 Separate from Clocked In (~/Developer/clocked-in). Never touch that folder from here.
 
@@ -50,22 +50,26 @@ Sources/Murmur/            The app: wires the logic to the Mac
   Permissions.swift        Microphone, Accessibility, and the Fn key setting
   Settings.swift           Menu choices and where the word list lives
   Log.swift                The app's log: Fn timings and what Murmur did, never words or typed keys
-Tests/MurmurCoreTests/     Unit tests, named by SPEC.md section
+Tests/MurmurCoreTests/     Unit tests, named by SPEC.md section; RulesTests checks project rules
 Resources/Info.plist       Bundle id com.judelewis.murmur; menu bar only; microphone reason
 scripts/                   install.sh, check-speech.sh
-docs/architecture.md       Why each choice was made
+docs/architecture.md       How a dictation works step by step, where things live, and why
+docs/working-with-jude.md  How Jude likes replies, steps and the way work is done
 archive/                   Finished TODO items
 ```
 
 ## Rules
 
 - Plan first. For anything beyond a trivial change, show the plan and wait for Jude's go-ahead.
+- The order of work: plan, build with tests, /code-review and fix what it finds, `./scripts/install.sh`, Jude tests, commit (Claude commits checked work without asking; never pushes). Details in docs/working-with-jude.md.
+- Keep the docs current without asking: in the same turn as any change or decision, update SPEC.md, docs/architecture.md, TODO.md (finished items to archive/) and Claude's memory, and say in one line what changed.
 - Logic goes in `MurmurCore` as plain functions with tests. The `Murmur` target only connects AppKit, audio and FluidAudio. If something is hard to test, the logic is in the wrong place.
-- Add or update tests in the same change as any feature. Each test suite's name starts with the SPEC.md section it proves, such as "2.1 Double tap Fn".
+- Add or update tests in the same change as any feature. Each test suite's name starts with the SPEC.md section it proves, such as "2.1 Double tap Fn"; RulesTests checks those sections still exist.
+- A repeated mistake becomes a test in RulesTests, not another line of prose.
 - When behaviour changes, update SPEC.md in the same change, and move finished TODO.md items to `archive/`.
 - After changing the app, run `./scripts/install.sh` so the copy in Applications is the new one. Jude tests by dictating into real apps.
 - After upgrading FluidAudio, run `./scripts/check-speech.sh`.
-- British English in all user-facing text. No em dashes anywhere, in text or comments. Menu and pill wording must make sense to someone who doesn't code.
+- British English in all user-facing text. No em dashes anywhere, in text or comments (RulesTests checks). Menu and pill wording must make sense to someone who doesn't code.
 - Never commit anything from `.env` files. `.env.local.example` holds names only.
 
 ## Gotchas
@@ -81,6 +85,7 @@ Format: **Rule**: why it matters.
 ## Sources of truth
 
 - SPEC.md: what Murmur does. Wins on behaviour.
-- docs/architecture.md: why it is built this way.
+- docs/architecture.md: how it works and why it is built this way.
+- docs/working-with-jude.md: how Jude likes to work.
 - TODO.md: what to do next.
 - FUTURE_TEST.md: what is not tested automatically, and why.
