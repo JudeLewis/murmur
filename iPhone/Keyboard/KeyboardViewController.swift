@@ -14,7 +14,7 @@ final class KeyboardViewController: UIInputViewController {
         host.view.translatesAutoresizingMaskIntoConstraints = false
         addChild(host)
         view.addSubview(host.view)
-        let height = view.heightAnchor.constraint(equalToConstant: 250)
+        let height = view.heightAnchor.constraint(equalToConstant: 268)
         height.priority = .defaultHigh + 1
         NSLayoutConstraint.activate([
             host.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -62,10 +62,20 @@ final class KeyboardViewController: UIInputViewController {
 final class KeyboardTalker {
     private(set) var state = KeyboardState.needsApp
     private(set) var note: String?
+    private(set) var levels = LevelHistory()
+    /// Casual style (SPEC.md 4.7): kept between uses.
+    var casual = UserDefaults.standard.bool(forKey: "casual") {
+        didSet {
+            UserDefaults.standard.set(casual, forKey: "casual")
+            show(casual ? "Casual: no capital at the start, no full stop at the end." : "Normal capitals and full stops.")
+        }
+    }
 
     @ObservationIgnored private weak var keyboard: KeyboardViewController?
     @ObservationIgnored private var status: PhoneStatus?
     @ObservationIgnored private var wait = KeyboardWait()
+    @ObservationIgnored private var lastTyped = LastTyped()
+    @ObservationIgnored private let tapFeel = UIImpactFeedbackGenerator(style: .light)
     @ObservationIgnored private var poll: Timer?
     @ObservationIgnored private var repeatDelete: Timer?
     @ObservationIgnored private var noteTimer: Timer?
@@ -104,12 +114,24 @@ final class KeyboardTalker {
         let fullAccess = keyboard?.hasFullAccess ?? false
         status = fullAccess ? Shared.store?.status() : nil
         state = KeyboardLink.state(of: status, now: .now, fullAccess: fullAccess)
+        if state == .listening {
+            if let level = status?.level { levels.add(level) }
+        } else {
+            levels.clear()
+        }
 
         switch wait.deliver(status?.result) {
-        case .type(let text):
+        case .type(let text, let pressEnter):
             let proxy = keyboard?.textDocumentProxy
-            proxy?.insertText(Tidy.forInsertion(text, after: proxy?.documentContextBeforeInput))
-            trace("typed \(text.count) characters")
+            let typed = Tidy.forInsertion(text, after: proxy?.documentContextBeforeInput, pressEnter: pressEnter)
+            proxy?.insertText(typed)
+            if pressEnter {
+                proxy?.insertText("\n")
+                lastTyped.typed("")
+            } else {
+                lastTyped.typed(typed)
+            }
+            trace("typed \(text.count) characters\(pressEnter ? ", then Return" : "")")
         case .note(let message):
             show(message)
         case .nothing:
@@ -124,14 +146,34 @@ final class KeyboardTalker {
             trace("opening the app")
             if keyboard?.openMurmur() != true { show("Open the Murmur app to turn it on.") }
         case .send(let kind):
-            send(KeyboardRequest(id: KeyboardRequest.newID(), kind: kind))
+            tapFeel.impactOccurred()
+            send(KeyboardRequest(id: KeyboardRequest.newID(), kind: kind, casual: casual))
         case .nothing:
             break
         }
     }
 
     func cancel() {
+        tapFeel.impactOccurred()
         send(KeyboardRequest(id: KeyboardRequest.newID(), kind: .cancel))
+    }
+
+    /// The "turn mic off" button: ends the session, so the orange dot goes.
+    func turnMicOff() {
+        tapFeel.impactOccurred()
+        send(KeyboardRequest(id: KeyboardRequest.newID(), kind: .turnOff))
+        show("Microphone off. Tap the mic to turn Murmur on again.")
+    }
+
+    /// Takes the last dictation back out, if the cursor is still straight after it.
+    func undo() {
+        tapFeel.impactOccurred()
+        guard let proxy = keyboard?.textDocumentProxy, let count = lastTyped.undo(before: proxy.documentContextBeforeInput) else {
+            show("Nothing to undo.")
+            return
+        }
+        for _ in 0..<count { proxy.deleteBackward() }
+        trace("undid a dictation")
     }
 
     private func send(_ request: KeyboardRequest) {
@@ -143,13 +185,19 @@ final class KeyboardTalker {
 
     // MARK: The other keys
 
-    func space() { keyboard?.textDocumentProxy.insertText(" ") }
-    func newLine() { keyboard?.textDocumentProxy.insertText("\n") }
+    func type(_ key: String) {
+        tapFeel.impactOccurred()
+        keyboard?.textDocumentProxy.insertText(key)
+    }
+
+    func space() { type(" ") }
+    func newLine() { type("\n") }
     func nextKeyboard() { keyboard?.advanceToNextInputMode() }
 
     /// Delete once, then again and again while held.
     func startDeleting() {
         guard repeatDelete == nil else { return }
+        tapFeel.impactOccurred()
         keyboard?.textDocumentProxy.deleteBackward()
         repeatDelete = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {

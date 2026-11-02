@@ -60,6 +60,23 @@ struct PhoneSessionTests {
         #expect(!KeyboardLink.isStart(URL(string: "https://start")!))
     }
 
+    @Test func theKeyboardCanTurnTheMicOffWhenIdle() {
+        #expect(KeyboardLink.canTurnOff(in: .ready(preparing: nil)))
+        #expect(KeyboardLink.canTurnOff(in: .ready(preparing: 40)))
+        #expect(!KeyboardLink.canTurnOff(in: .listening))
+        #expect(!KeyboardLink.canTurnOff(in: .writing(preparing: nil)))
+        #expect(!KeyboardLink.canTurnOff(in: .needsApp))
+        #expect(!KeyboardLink.canTurnOff(in: .needsFullAccess))
+
+        // Not a dictation request: the flow ignores it, and nothing is waited for.
+        var flow = DictationFlow()
+        #expect(flow.handle(.turnOff) == .nothing)
+        var wait = KeyboardWait()
+        wait.sent(KeyboardRequest(id: 5, kind: .start), recording: nil)
+        wait.sent(KeyboardRequest(id: 6, kind: .turnOff), recording: 5)
+        #expect(wait.deliver(PhoneResult(id: 5, text: "Hi.")) == .nothing)
+    }
+
     @Test func endsTenMinutesAfterTheLastDictation() {
         var session = PhoneSession()
         #expect(!session.isOn)
@@ -121,7 +138,7 @@ struct KeyboardTalkTests {
 
     @Test func onlyTheKeyboardThatAskedTypesTheText() {
         let result = PhoneResult(id: 7, text: "Hello there.")
-        #expect(KeyboardLink.delivery(of: result, waitingFor: 7) == .type("Hello there."))
+        #expect(KeyboardLink.delivery(of: result, waitingFor: 7) == .type("Hello there.", pressEnter: false))
         #expect(KeyboardLink.delivery(of: result, waitingFor: 8) == .nothing)
         #expect(KeyboardLink.delivery(of: result, waitingFor: nil) == .nothing)
         #expect(KeyboardLink.delivery(of: nil, waitingFor: 7) == .nothing)
@@ -156,7 +173,7 @@ struct KeyboardTalkTests {
         var wait = KeyboardWait()
         wait.sent(KeyboardRequest(id: 5, kind: .start), recording: nil)
         #expect(wait.deliver(PhoneResult(id: 4, text: "Old.")) == .nothing)
-        #expect(wait.deliver(PhoneResult(id: 5, text: "New.")) == .type("New."))
+        #expect(wait.deliver(PhoneResult(id: 5, text: "New.")) == .type("New.", pressEnter: false))
         #expect(wait.deliver(PhoneResult(id: 5, text: "New.")) == .nothing)
     }
 
@@ -170,7 +187,7 @@ struct KeyboardTalkTests {
     @Test func stopFromAReopenedKeyboardStillTypes() {
         var wait = KeyboardWait()
         wait.sent(KeyboardRequest(id: 9, kind: .stop), recording: 5)
-        #expect(wait.deliver(PhoneResult(id: 5, text: "Hello.")) == .type("Hello."))
+        #expect(wait.deliver(PhoneResult(id: 5, text: "Hello.")) == .type("Hello.", pressEnter: false))
 
         // The app's own recordings (0) are never typed by the keyboard.
         wait.sent(KeyboardRequest(id: 10, kind: .stop), recording: 0)

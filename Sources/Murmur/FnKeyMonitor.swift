@@ -2,7 +2,8 @@ import AppKit
 import CoreGraphics
 import MurmurCore
 
-/// Watches the keyboard for a double tap of Fn (the globe key), and for Escape.
+/// Watches the keyboard for a double tap of Fn (the globe key), Fn held to
+/// talk, and Escape.
 ///
 /// Uses an event tap, which needs Accessibility permission. Every key is passed
 /// straight on to the app in front; Murmur only listens.
@@ -10,6 +11,14 @@ import MurmurCore
 final class FnKeyMonitor {
     var onDoubleTap: () -> Void = {}
     var onEscape: () -> Void = {}
+    var onHoldStarted: () -> Void = {}
+    var onHoldEnded: () -> Void = {}
+    var onHoldCancelled: () -> Void = {}
+
+    var holdToTalk: Bool {
+        get { watcher.holdToTalk }
+        set { watcher.holdToTalk = newValue }
+    }
 
     private var watcher = FnWatcher()
     private var tap: CFMachPort?
@@ -60,12 +69,34 @@ final class FnKeyMonitor {
             return
         }
 
-        switch watcher.handle(event, at: time) {
+        let wasDown = watcher.fnIsDown
+        react(to: watcher.handle(event, at: time))
+        if watcher.fnIsDown, !wasDown {
+            // Nothing else happens while Fn is simply held, so check back once the hold is long enough.
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(FnWatcher.holdDelay + 0.02))
+                guard let self else { return }
+                self.react(to: self.watcher.tick(at: ProcessInfo.processInfo.systemUptime))
+            }
+        }
+    }
+
+    private func react(to outcome: FnWatcher.Outcome) {
+        switch outcome {
         case .doubleTap:
             log.notice("Double tap")
             onDoubleTap()
         case .escape:
             onEscape()
+        case .holdStarted:
+            log.notice("Fn held")
+            onHoldStarted()
+        case .holdEnded:
+            log.notice("Fn let go")
+            onHoldEnded()
+        case .holdCancelled:
+            log.notice("Fn hold cancelled by another key")
+            onHoldCancelled()
         case .nothing:
             break
         }

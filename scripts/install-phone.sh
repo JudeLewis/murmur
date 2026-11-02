@@ -18,8 +18,14 @@ xcodebuild -project iPhone/Murmur.xcodeproj -scheme MurmurPhone -configuration R
 
 echo "Installing on the iPhone…"
 xcrun devicectl device install app --device "$PHONE" "$APP" >/dev/null
-if xcrun devicectl device process launch --device "$PHONE" com.judelewis.murmur.iphone >/dev/null 2>&1; then
-  echo "Done. Murmur is on the iPhone and open. Leave it on screen until it says Ready (a few minutes after each update)."
-else
-  echo "Done. Murmur is on the iPhone. Unlock the phone, tap the Murmur icon, and leave it on screen until it says Ready (a few minutes after each update)."
-fi
+# Open it straight away, so the speech model starts getting ready (minutes after
+# every update). A locked phone refuses, so keep trying for two minutes.
+for attempt in {1..24}; do
+  if xcrun devicectl device process launch --device "$PHONE" com.judelewis.murmur.iphone >/dev/null 2>&1; then
+    echo "Done. Murmur is open on the iPhone. Leave it on screen until it says Ready."
+    exit 0
+  fi
+  [[ $attempt == 1 ]] && echo "Unlock the iPhone to finish…"
+  sleep 5
+done
+echo "Done. Murmur is on the iPhone. Unlock it, tap the Murmur icon, and leave it on screen until it says Ready."

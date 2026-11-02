@@ -9,16 +9,21 @@ public enum KeyboardRequestKind: String, Codable, Sendable {
     case start
     case stop
     case cancel
+    /// The keyboard's "turn mic off" button: end the session now.
+    case turnOff
 }
 
 public struct KeyboardRequest: Codable, Equatable, Sendable {
     /// Unique and rising: when the keyboard sent it, in milliseconds since 1970.
     public var id: Int
     public var kind: KeyboardRequestKind
+    /// The keyboard's casual switch (no capital at the start, no full stop at the end).
+    public var casual: Bool?
 
-    public init(id: Int, kind: KeyboardRequestKind) {
+    public init(id: Int, kind: KeyboardRequestKind, casual: Bool? = nil) {
         self.id = id
         self.kind = kind
+        self.casual = casual
     }
 
     public static func newID(at date: Date = .now) -> Int {
@@ -34,11 +39,14 @@ public struct PhoneResult: Codable, Equatable, Sendable {
     public var text: String
     /// Set when the recording couldn't be turned into text.
     public var problem: String?
+    /// "press enter" was said at the end: type a Return after the text.
+    public var pressEnter: Bool?
 
-    public init(id: Int, text: String, problem: String? = nil) {
+    public init(id: Int, text: String, problem: String? = nil, pressEnter: Bool? = nil) {
         self.id = id
         self.text = text
         self.problem = problem
+        self.pressEnter = pressEnter
     }
 }
 
@@ -55,6 +63,8 @@ public struct PhoneStatus: Codable, Equatable, Sendable {
     /// quiet, iOS has closed the app and the keyboard must open it again.
     public var heartbeat = Date.distantPast
     public var result: PhoneResult?
+    /// How loud the microphone is while listening, 0 to about 1, for the keyboard's bars.
+    public var level: Float?
 
     public init() {}
 }
@@ -105,6 +115,13 @@ public enum KeyboardLink {
         case nothing
     }
 
+    /// The "turn mic off" button shows only while a session is on and nothing is
+    /// being said or written, so it can't throw a dictation away by accident.
+    public static func canTurnOff(in state: KeyboardState) -> Bool {
+        if case .ready = state { return true }
+        return false
+    }
+
     /// The model can still be getting ready: the recording waits for it, as on the Mac.
     public static func tap(in state: KeyboardState) -> Tap {
         switch state {
@@ -116,7 +133,7 @@ public enum KeyboardLink {
     }
 
     public enum Delivery: Equatable, Sendable {
-        case type(String)
+        case type(String, pressEnter: Bool)
         case note(String)
         case nothing
     }
@@ -125,8 +142,9 @@ public enum KeyboardLink {
     public static func delivery(of result: PhoneResult?, waitingFor id: Int?) -> Delivery {
         guard let result, let id, result.id == id else { return .nothing }
         if let problem = result.problem { return .note(problem) }
-        if result.text.isEmpty { return .note("Didn't catch that.") }
-        return .type(result.text)
+        let pressEnter = result.pressEnter ?? false
+        if result.text.isEmpty && !pressEnter { return .note("Didn't catch that.") }
+        return .type(result.text, pressEnter: pressEnter)
     }
 }
 
@@ -142,7 +160,7 @@ public struct KeyboardWait: Equatable, Sendable {
         switch request.kind {
         case .start: id = request.id
         case .stop: if let recording, recording != 0 { id = recording }
-        case .cancel: id = nil
+        case .cancel, .turnOff: id = nil
         }
     }
 
@@ -154,6 +172,48 @@ public struct KeyboardWait: Equatable, Sendable {
         let delivery = KeyboardLink.delivery(of: result, waitingFor: id)
         if delivery != .nothing { id = nil }
         return delivery
+    }
+}
+
+/// The keyboard's Undo: takes the last dictation back out, as long as the
+/// cursor is still straight after it.
+public struct LastTyped: Equatable, Sendable {
+    public private(set) var text: String?
+
+    public init() {}
+
+    public mutating func typed(_ text: String) {
+        self.text = text.isEmpty ? nil : text
+    }
+
+    /// How many characters to delete, or nil if the text before the cursor
+    /// doesn't end with the dictation (the cursor moved, or it was edited).
+    /// iOS often shows a keyboard only the current line or a short tail, so a
+    /// tail of at least a few characters that ends the dictation counts too.
+    public mutating func undo(before: String?) -> Int? {
+        guard let text, let before else { return nil }
+        let fullyVisible = before.hasSuffix(text)
+        let tailVisible = before.count >= 4 && !before.contains("\n") && text.hasSuffix(before)
+        guard fullyVisible || tailVisible else { return nil }
+        self.text = nil
+        return text.count
+    }
+}
+
+/// The keyboard's moving bars: the last few loudness readings, newest last.
+public struct LevelHistory: Equatable, Sendable {
+    public static let bars = 16
+    public private(set) var levels = [Float](repeating: 0, count: bars)
+
+    public init() {}
+
+    public mutating func add(_ level: Float) {
+        levels.removeFirst()
+        levels.append(min(1, max(0, level)))
+    }
+
+    public mutating func clear() {
+        levels = [Float](repeating: 0, count: Self.bars)
     }
 }
 

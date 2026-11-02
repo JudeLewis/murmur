@@ -1,4 +1,5 @@
 import MurmurCore
+import MurmurUI
 import SwiftUI
 import UIKit
 
@@ -9,7 +10,9 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             List {
-                if murmur.openedFromKeyboard && murmur.sessionOn {
+                if let since = murmur.preparingSince, murmur.preparing != nil {
+                    Section { GettingReady(since: since, fromKeyboard: murmur.openedFromKeyboard) }
+                } else if murmur.openedFromKeyboard && murmur.sessionOn {
                     Section {
                         Label("Murmur is on. Tap ◀ at the top left to go back.", systemImage: "arrow.uturn.backward.circle.fill")
                             .font(.headline)
@@ -50,7 +53,11 @@ struct ContentView: View {
                 Section("Settings") {
                     Toggle("Tidy speech (drops um and er)", isOn: $murmur.tidy)
                     Toggle("British spelling", isOn: $murmur.british)
-                    NavigationLink("Word list") { WordListView(text: $murmur.wordList) }
+                    NavigationLink("Word list and snippets") {
+                        WordsView(model: murmur.words)
+                            .navigationTitle("Word list and snippets")
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
                 }
 
                 Section("Setting up the keyboard") {
@@ -70,9 +77,7 @@ struct ContentView: View {
     private var statusLine: String {
         if let problem = murmur.micProblem { return problem }
         if let problem = murmur.modelProblem { return problem }
-        if let percent = murmur.preparing {
-            return "Getting the speech model ready (\(percent)%). After an update this takes a few minutes. Keep Murmur open until it says Ready."
-        }
+        if murmur.preparing != nil { return "Getting ready…" }
         if murmur.sessionOn { return "Keyboard on. Turns off 10 minutes after your last dictation." }
         return "Ready"
     }
@@ -103,17 +108,33 @@ struct ContentView: View {
     }
 }
 
-/// The word list, edited in a text box (SPEC.md 4.2 for the rules).
-struct WordListView: View {
-    @Binding var text: String
+/// The card shown while the speech model gets ready for this iPhone, which
+/// takes minutes after every update (SPEC.md 9.1).
+private struct GettingReady: View {
+    let since: Date
+    let fromKeyboard: Bool
 
     var body: some View {
-        TextEditor(text: $text)
-            .font(.body.monospaced())
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
-            .padding(.horizontal, 8)
-            .navigationTitle("Word list")
-            .navigationBarTitleDisplayMode(.inline)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                ProgressView()
+                Text("Getting Murmur ready").font(.headline)
+                Spacer()
+                TimelineView(.periodic(from: since, by: 1)) { context in
+                    let seconds = max(0, Int(context.date.timeIntervalSince(since)))
+                    Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text("After an update this takes a few minutes, once. Keep this screen open; it stays awake by itself.")
+                .font(.subheadline)
+            if fromKeyboard {
+                Text("Once it says Ready, tap \u{25C0} at the top left to go back.")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tint)
+            }
+        }
+        .padding(.vertical, 6)
     }
 }

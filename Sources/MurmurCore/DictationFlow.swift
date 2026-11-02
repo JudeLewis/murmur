@@ -17,6 +17,8 @@ public enum DictationAction: Equatable, Sendable {
 /// only decides what each event means, so it can be tested without a microphone.
 public struct DictationFlow: Sendable {
     public private(set) var phase: DictationPhase = .idle
+    /// This dictation was started by holding Fn, so letting go finishes it.
+    public private(set) var heldOpen = false
 
     public init() {}
 
@@ -35,8 +37,29 @@ public struct DictationFlow: Sendable {
         }
     }
 
+    /// Fn held on its own (SPEC.md 2.5). Ignored in the middle of a dictation.
+    public mutating func holdStarted() -> DictationAction {
+        guard phase == .idle else { return .nothing }
+        heldOpen = true
+        return toggle()
+    }
+
+    /// Fn let go: finishes only a dictation the hold started.
+    public mutating func holdEnded() -> DictationAction {
+        guard heldOpen else { return .nothing }
+        heldOpen = false
+        return phase == .recording ? toggle() : .nothing
+    }
+
+    /// Another key pressed during the hold.
+    public mutating func holdCancelled() -> DictationAction {
+        guard heldOpen else { return .nothing }
+        return cancel()
+    }
+
     /// Escape while listening throws the recording away.
     public mutating func cancel() -> DictationAction {
+        heldOpen = false
         guard phase == .recording else { return .nothing }
         phase = .idle
         return .cancelRecording
@@ -63,5 +86,6 @@ public struct DictationFlow: Sendable {
     /// The text was pasted, or nothing was heard, or something failed.
     public mutating func finished() {
         phase = .idle
+        heldOpen = false
     }
 }

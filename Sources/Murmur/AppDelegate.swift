@@ -1,10 +1,13 @@
 import AppKit
+import CoreAudio
 import MurmurCore
 import MurmurSpeech
+import MurmurUI
 import ServiceManagement
+import SwiftUI
 
-/// Runs Murmur: the menu bar icon, the Fn double tap, and each dictation from
-/// microphone to pasted text.
+/// Runs Murmur: the menu bar icon, the Fn double tap and hold, and each
+/// dictation from microphone to pasted text.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private enum Loading: Equatable {
@@ -28,6 +31,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var accessibilityTimer: Timer?
     /// The last recording, kept if it couldn't be turned into text, so it can be tried again.
     private var unsent: (samples: [Float], sampleRate: Double)?
+    /// The app in front when listening started: it decides casual style.
+    private var dictatingInto: String?
+    /// The volume before Murmur turned it down, what the device then reported,
+    /// and which device it was (the output can change mid-dictation).
+    private var ducked: (original: Float, lowered: Float, device: AudioDeviceID)?
+    private var quitSignal: DispatchSourceSignal?
+    private var wordsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Settings.registerDefaults()
@@ -40,10 +50,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         keys.onDoubleTap = { [weak self] in self?.toggle() }
         keys.onEscape = { [weak self] in self?.cancel() }
+        keys.onHoldStarted = { [weak self] in self?.holdStarted() }
+        keys.onHoldEnded = { [weak self] in self?.holdEnded() }
+        keys.onHoldCancelled = { [weak self] in self?.holdCancelled() }
+        keys.holdToTalk = Settings.holdToTalk
 
         turnOnOpenAtLoginOnce()
+        putVolumeBackAfterCrash()
+        // install.sh replaces Murmur with a quit signal: quit properly, so the volume goes back.
+        signal(SIGTERM, SIG_IGN)
+        quitSignal = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        quitSignal?.setEventHandler { NSApp.terminate(nil) }
+        quitSignal?.resume()
         loadModel()
         Task { await askForPermissions() }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        turnMusicBackUp()
     }
 
     // MARK: Permissions
@@ -76,23 +100,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Dictation
 
     private func toggle() {
-        let action = flow.toggle()
-        log.notice("Toggle: \(String(describing: action), privacy: .public)")
+        perform(flow.toggle())
+    }
+
+    private func perform(_ action: DictationAction) {
+        log.notice("Action: \(String(describing: action), privacy: .public)")
         switch action {
         case .startRecording: startRecording()
         case .stopAndTranscribe: stopAndTranscribe()
-        case .cancelRecording, .nothing: break
+        case .cancelRecording: cancelled()
+        case .nothing: break
         }
         updateIcon()
     }
 
-    private func cancel() {
-        guard flow.cancel() == .cancelRecording else { return }
+    /// Fn held on its own: listen until it's let go (rules in DictationFlow).
+    private func holdStarted() { perform(flow.holdStarted()) }
+    private func holdEnded() { perform(flow.holdEnded()) }
+    private func holdCancelled() { perform(flow.holdCancelled()) }
+
+    private func cancel() { perform(flow.cancel()) }
+
+    private func cancelled() {
         stopWatching()
+        turnMusicBackUp()
         _ = recorder?.stop()
         recorder = nil
         pill.flash("Cancelled", seconds: 1.2)
-        updateIcon()
     }
 
     private func startRecording() {
@@ -110,8 +144,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             pill.flash("Couldn't start the microphone.", seconds: 4)
             return
         }
+        dictatingInto = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         playSound("Tink")
         pill.show(.listening)
+        // After the Tink, so it isn't turned down too.
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard let self, self.flow.phase == .recording else { return }
+            self.turnMusicDown()
+        }
 
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -135,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.recorder = nil
         let samples = recorder.stop()
         log.notice("Recorded \(Double(samples.count) / recorder.sampleRate, format: .fixed(precision: 1)) s at \(Int(recorder.sampleRate)) Hz")
+        turnMusicBackUp()
         playSound("Pop")
         transcribe(samples, sampleRate: recorder.sampleRate)
     }
@@ -159,11 +201,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func deliver(_ raw: String) {
-        let text = Tidy.finish(raw, words: Settings.words(), british: Settings.british)
+        let casual = dictatingInto.map(Settings.casualApps.contains) ?? false
+        let dictation = Tidy.dictation(
+            raw, words: Settings.words(), snippets: Settings.snippets, british: Settings.british, casual: casual)
+        let text = dictation.text
         flow.finished()
         updateIcon()
 
-        log.notice("Wrote \(text.count) characters")
+        log.notice("Wrote \(text.count) characters\(dictation.pressEnter ? ", then Return" : "", privacy: .public)")
+        if text.isEmpty && dictation.pressEnter {
+            pill.hide()
+            Paster.pressReturn(after: .zero)
+            return
+        }
         guard !text.isEmpty else {
             pill.flash("Didn't catch that.", seconds: 1.5)
             return
@@ -172,8 +222,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         recent.add(text)
         Settings.recent = recent
 
-        if Paster.paste(Tidy.forInsertion(text)) {
+        if Paster.paste(Tidy.forInsertion(text, pressEnter: dictation.pressEnter)) {
             log.notice("Pasted")
+            if dictation.pressEnter { Paster.pressReturn() }
             pill.hide()
         } else {
             log.notice("Not allowed to paste; left on the clipboard")
@@ -186,6 +237,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         levelTimer = nil
         limitTask?.cancel()
         limitTask = nil
+    }
+
+    /// SPEC.md 2.6: a quarter of the volume while listening.
+    private func turnMusicDown() {
+        guard Settings.duckMusic, ducked == nil, let device = SystemVolume.outputDevice(),
+              let volume = SystemVolume.volume(of: device), volume > 0.01 else { return }
+        SystemVolume.set(Ducking.lowered(from: volume), on: device)
+        // What the device actually took: some round to their own steps.
+        guard let lowered = SystemVolume.volume(of: device) else { return }
+        ducked = (volume, lowered, device)
+        Settings.duckedVolume = [Double(volume), Double(lowered), Double(device)]
+    }
+
+    /// Puts back the device that was turned down, even if the output has changed since.
+    private func turnMusicBackUp() {
+        guard let ducked else { return }
+        self.ducked = nil
+        Settings.duckedVolume = nil
+        if let current = SystemVolume.volume(of: ducked.device), Ducking.shouldRestore(current: current, lowered: ducked.lowered) {
+            SystemVolume.set(ducked.original, on: ducked.device)
+        }
+    }
+
+    /// Murmur quit or crashed while the volume was down: put it back now.
+    private func putVolumeBackAfterCrash() {
+        guard let saved = Settings.duckedVolume, saved.count == 3 else { return }
+        ducked = (Float(saved[0]), Float(saved[1]), AudioDeviceID(saved[2]))
+        turnMusicBackUp()
     }
 
     private func playSound(_ name: String) {
@@ -234,13 +313,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var statusLine: String {
         switch (flow.phase, loading) {
+        case (.recording, _) where flow.heldOpen: "Listening. Let go of Fn to finish, Esc to cancel."
         case (.recording, _): "Listening. Double-tap Fn to finish, Esc to cancel."
         case (.transcribing, _): "Writing…"
         case (.idle, .loading(let fraction)) where fraction > 0 && fraction < 1:
             "Getting the speech model ready: \(Int(fraction * 100))%"
         case (.idle, .loading): "Getting the speech model ready…"
         case (.idle, .failed): "Couldn't load the speech model. Check the internet."
-        case (.idle, .ready): "Ready. Double-tap Fn to talk."
+        case (.idle, .ready): Settings.holdToTalk ? "Ready. Double-tap or hold Fn to talk." : "Ready. Double-tap Fn to talk."
         }
     }
 
@@ -289,11 +369,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let recentItem = NSMenuItem(title: "Recent (click one to copy it)", action: nil, keyEquivalent: "")
         recentItem.submenu = recentMenu
         menu.addItem(recentItem)
-        menu.addItem(item("Edit word list…", #selector(editWordList)))
+        menu.addItem(item("Word list and snippets…", #selector(openWords)))
         menu.addItem(.separator())
 
         menu.addItem(item("Tidy speech (drops um and er)", #selector(toggleTidy), on: Settings.model == .tidy))
         menu.addItem(item("British spelling", #selector(toggleBritish), on: Settings.british))
+        if let front = NSWorkspace.shared.frontmostApplication, let id = front.bundleIdentifier,
+           id != Bundle.main.bundleIdentifier {
+            let casual = item("Casual style in \(front.localizedName ?? "this app")", #selector(toggleCasual(_:)),
+                              on: Settings.casualApps.contains(id))
+            casual.representedObject = id
+            menu.addItem(casual)
+        }
+        menu.addItem(item("Hold Fn to talk", #selector(toggleHoldToTalk), on: Settings.holdToTalk))
+        menu.addItem(item("Turn music down while listening", #selector(toggleDuckMusic), on: Settings.duckMusic))
         menu.addItem(item("Sounds", #selector(toggleSounds), on: Settings.sounds))
         menu.addItem(item("Open at login", #selector(toggleOpenAtLogin), on: SMAppService.mainApp.status == .enabled))
         menu.addItem(.separator())
@@ -334,12 +423,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pill.flash("Copied", seconds: 1.2)
     }
 
-    @objc private func editWordList() {
-        NSWorkspace.shared.open(
-            [Settings.wordListURL],
-            withApplicationAt: URL(fileURLWithPath: "/System/Applications/TextEdit.app"),
-            configuration: NSWorkspace.OpenConfiguration())
+    /// The word list and snippets window (SPEC.md 4.2 and 4.5), read fresh each time it opens.
+    @objc private func openWords() {
+        let model = WordsModel(
+            words: Settings.words(), snippets: Settings.snippets, recent: { Settings.recent.items },
+            saveWords: { Settings.saveWords($0) }, saveSnippets: { Settings.snippets = $0 })
+        let content = NSHostingController(rootView: WordsView(model: model).frame(minWidth: 460, minHeight: 520))
+        if let window = wordsWindow {
+            window.contentViewController = content
+        } else {
+            let window = NSWindow(contentViewController: content)
+            window.title = "Murmur: word list and snippets"
+            window.isReleasedWhenClosed = false
+            window.center()
+            wordsWindow = window
+        }
+        NSApp.activate()
+        wordsWindow?.makeKeyAndOrderFront(nil)
     }
+
+    @objc private func toggleCasual(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        var apps = Settings.casualApps
+        if apps.contains(id) { apps.remove(id) } else { apps.insert(id) }
+        Settings.casualApps = apps
+    }
+
+    @objc private func toggleHoldToTalk() {
+        Settings.holdToTalk.toggle()
+        keys.holdToTalk = Settings.holdToTalk
+    }
+
+    @objc private func toggleDuckMusic() { Settings.duckMusic.toggle() }
 
     @objc private func toggleTidy() {
         Settings.model = Settings.model == .tidy ? .exact : .tidy

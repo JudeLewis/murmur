@@ -41,22 +41,28 @@ Sources/MurmurCore/        Plain logic, no AppKit or audio; all of it tested
   DictationFlow.swift      The on/off switch: idle, recording, transcribing
   Tidy.swift               Model text to pasted text; the recent list
   BritishSpelling.swift    American to British spelling, from a fixed word list
-  WordList.swift           Jude's own word list (words.txt)
+  WordList.swift           Jude's own word list (words.txt), and writing it back
+  WordFix.swift            Spotting word list fixes in a corrected dictation
+  Snippets.swift           Say a phrase, get saved text
+  SpokenCommands.swift     "new line", "new paragraph", "press enter"; casual style; Tidy.dictation, the whole order
+  Ducking.swift            Turning music down while listening (Mac)
   PhoneLink.swift          iPhone: what the keyboard shows, sends and types; the 10 minute session
   LinkStore.swift          iPhone: the files the app and keyboard share, and their trace
 Sources/MurmurSpeech/      Shared by Mac and iPhone: needs FluidAudio or the microphone
   Transcriber.swift        Loading the Parakeet model and transcribing
   SpeechModel.swift        Tidy (Bark 3.0 Clean) or exact (Bark 3.0)
   MonoMix.swift            One microphone buffer to mono samples and a loudness level
+Sources/MurmurUI/          SwiftUI screens shared by Mac and iPhone: the word list and snippets (WordsView, WordsModel)
 Sources/Murmur/            The app: wires the logic to the Mac
   main.swift               Starts the app; also the --transcribe test mode
   AppDelegate.swift        Menu bar, and each dictation from microphone to paste
-  FnKeyMonitor.swift       Event tap that spots Fn and Escape
+  FnKeyMonitor.swift       Event tap that spots Fn (double tap and hold) and Escape
   Recorder.swift           Microphone into memory
   Paster.swift             Clipboard and Command-V, then restores the clipboard
   Pill.swift               The black pill at the bottom of the screen
   Permissions.swift        Microphone, Accessibility, and the Fn key setting
-  Settings.swift           Menu choices and where the word list lives
+  Settings.swift           Menu choices, and where the word list and snippets live
+  SystemVolume.swift       The Mac's output volume, for turning music down
   Log.swift                The app's log: Fn timings and what Murmur did, never words or typed keys
 iPhone/                    The iPhone app and keyboard
   Murmur.xcodeproj         Two targets: MurmurPhone (the app) and MurmurKeyboard
@@ -76,7 +82,7 @@ archive/                   Finished TODO items
 ## Rules
 
 - Plan first. For anything beyond a trivial change, show the plan and wait for Jude's go-ahead.
-- The order of work: plan, build with tests, /code-review and fix what it finds, `./scripts/install.sh`, Jude tests, commit (Claude commits checked work without asking; never pushes). Details in docs/working-with-jude.md.
+- The order of work: plan, build with tests, /code-review and fix what it finds, `./scripts/install.sh`, Jude tests, commit (Claude commits checked work without asking; pushes only when Jude asks). Details in docs/working-with-jude.md.
 - Keep the docs current without asking: in the same turn as any change or decision, update SPEC.md, docs/architecture.md, TODO.md (finished items to archive/) and Claude's memory, and say in one line what changed.
 - Logic goes in `MurmurCore` as plain functions with tests. The `Murmur` target only connects AppKit, audio and FluidAudio. If something is hard to test, the logic is in the wrong place.
 - Add or update tests in the same change as any feature. Each test suite's name starts with the SPEC.md section it proves, such as "2.1 Double tap Fn"; RulesTests checks those sections still exist.
@@ -85,6 +91,7 @@ archive/                   Finished TODO items
 - After changing the app, run `./scripts/install.sh` so the copy in Applications is the new one. Jude tests by dictating into real apps.
 - After upgrading FluidAudio, run `./scripts/check-speech.sh`.
 - British English in all user-facing text. No em dashes anywhere, in text or comments (RulesTests checks). Menu and pill wording must make sense to someone who doesn't code.
+- Murmur is on GitHub, private: github.com/JudeLewis/murmur. Push only when Jude asks.
 - Never commit anything from `.env` files. `.env.local.example` holds names only.
 
 ## Gotchas
@@ -97,7 +104,7 @@ Format: **Rule**: why it matters.
 - **Don't use `CGEvent.timestamp` for timing**: on Apple silicon it counts clock ticks, not nanoseconds. FnKeyMonitor uses `ProcessInfo.systemUptime` (2 Nov 2026).
 - **The Mac only sees Library/ inside an iPhone App Group folder**: `devicectl` listed nothing and couldn't copy files at the top of group.com.judelewis.murmur, though the app had written them (2 Nov 2026). The shared files live in Library/Murmur.
 - **Open a newly installed iPhone app by hand the first time**: `devicectl` refused to launch it ("invalid code signature, inadequate entitlements") until Jude tapped the icon once; after that it launched fine (2 Nov 2026).
-- **Every iPhone install makes the model get ready again, for minutes**: iOS drops the copy prepared for the iPhone's chip when the app is reinstalled. On 2 Nov 2026 it took 5.5 minutes and only progressed with the app on screen; Jude saw "Writing" for ages. Later opens of the same install took 0.4 seconds. Bundle phone changes into few installs, and tell Jude to keep Murmur open until Ready after each one.
+- **Every iPhone install makes the model get ready again, for minutes**: iOS drops the copy prepared for the iPhone's chip when the app is reinstalled. On 2 Nov 2026 it took 75 seconds to 5.5 minutes per install, and Jude twice saw "Writing" for ages. Keeping the same build number doesn't help (tested: still 75 seconds). Later opens of the same install take 0.4 seconds. The app now shows a "Getting Murmur ready" card with a timer and keeps the screen awake; install-phone.sh keeps trying to open the app until the phone is unlocked. Still bundle phone changes into few installs.
 - **The first load of each speech model takes about a minute**: macOS prepares the model for the Neural Engine once; later loads take under a second (seen 2 Nov 2026). Not a hang.
 
 ## Sources of truth

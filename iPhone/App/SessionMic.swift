@@ -15,6 +15,7 @@ final class SessionMic {
     private struct Captured {
         var capturing = false
         var samples: [Float] = []
+        var level: Float = 0
     }
 
     private let engine = AVAudioEngine()
@@ -22,6 +23,9 @@ final class SessionMic {
     private(set) var sampleRate: Double = 0
 
     var isRunning: Bool { engine.isRunning }
+
+    /// Loudness while capturing, 0 to about 1, for the keyboard's bars.
+    var level: Float { captured.withLock { $0.level } }
 
     /// Also used to restart after iOS changes the microphone (AirPods in or out).
     func start() throws {
@@ -67,9 +71,11 @@ final class SessionMic {
     /// Built outside any actor: the audio thread calls it, not the main thread.
     private static func tapBlock(into captured: OSAllocatedUnfairLock<Captured>) -> AVAudioNodeTapBlock {
         { buffer, _ in
-            guard captured.withLock({ $0.capturing }), let (heard, _) = MonoMix.mix(buffer) else { return }
+            guard captured.withLock({ $0.capturing }), let (heard, level) = MonoMix.mix(buffer) else { return }
             captured.withLock {
-                if $0.capturing { $0.samples.append(contentsOf: heard) }
+                guard $0.capturing else { return }
+                $0.samples.append(contentsOf: heard)
+                $0.level = level
             }
         }
     }

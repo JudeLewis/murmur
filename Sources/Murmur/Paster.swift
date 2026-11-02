@@ -46,6 +46,18 @@ enum Paster {
         }
     }
 
+    /// For "press enter" at the end of a dictation: Return, a moment after the paste lands.
+    static func pressReturn(after delay: Duration = .milliseconds(150)) {
+        guard AXIsProcessTrusted() else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            let source = CGEventSource(stateID: .combinedSessionState)
+            let returnKey: CGKeyCode = 36
+            CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: true)?.post(tap: .cghidEventTap)
+            CGEvent(keyboardEventSource: source, virtualKey: returnKey, keyDown: false)?.post(tap: .cghidEventTap)
+        }
+    }
+
     private static func pressCommandV() {
         let source = CGEventSource(stateID: .combinedSessionState)
         let vKey: CGKeyCode = 9

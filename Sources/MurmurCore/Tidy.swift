@@ -26,17 +26,20 @@ public enum Tidy {
 
     /// A space after each dictation, so the next one starts a new word
     /// instead of running on from the last ("Hello there.How are you?").
-    public static func forInsertion(_ text: String) -> String {
-        text.isEmpty ? "" : text + " "
+    /// Not after a line break, or when Return is pressed next.
+    public static func forInsertion(_ text: String, pressEnter: Bool = false) -> String {
+        if text.isEmpty || pressEnter || text.last?.isNewline == true { return text }
+        return text + " "
     }
 
     /// On iPhone the keyboard can see the text before the cursor, so it also
     /// adds a space in front when the dictation would otherwise join the word
     /// or punctuation there. Not after an opening bracket, quote, @, # or /.
-    public static func forInsertion(_ text: String, after before: String?) -> String {
+    public static func forInsertion(_ text: String, after before: String?, pressEnter: Bool = false) -> String {
         guard !text.isEmpty else { return "" }
         let joins = before?.last.map { $0.isLetter || $0.isNumber || ".,!?;:%)]}\u{201D}\u{2019}\u{2026}".contains($0) } ?? false
-        return (joins ? " " : "") + forInsertion(text)
+        let startsOnNewLine = text.first?.isNewline == true
+        return (joins && !startsOnNewLine ? " " : "") + forInsertion(text, pressEnter: pressEnter)
     }
 }
 

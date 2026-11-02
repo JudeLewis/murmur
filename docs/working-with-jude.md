@@ -38,6 +38,10 @@ How Jude likes to work with Claude on Murmur. Read this before replying. It matc
 - Cap anything that loops (for example, three rounds of trying a fix before stopping to ask).
 - Product questions ("is this worth building?") get an honest recommendation, not a list of every option.
 
+## iPhone updates
+
+- After every iPhone install the speech model needs one to a few minutes to get ready again. Say so in the reply, and group phone changes so installs are rare.
+
 ## When something breaks
 
 - Read Murmur's log first: `/usr/bin/log show --last 10m --predicate 'subsystem == "com.judelewis.murmur"' --style compact`.

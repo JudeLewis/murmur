@@ -12,6 +12,10 @@ enum Settings {
             "model": SpeechModel.tidy.rawValue,
             "british": true,
             "sounds": true,
+            "holdToTalk": true,
+            "duckMusic": true,
+            // Messages and WhatsApp start in casual style (SPEC.md 4.7).
+            "casualApps": ["com.apple.MobileSMS", "net.whatsapp.WhatsApp"],
         ])
     }
 
@@ -28,6 +32,29 @@ enum Settings {
     static var sounds: Bool {
         get { defaults.bool(forKey: "sounds") }
         set { defaults.set(newValue, forKey: "sounds") }
+    }
+
+    static var holdToTalk: Bool {
+        get { defaults.bool(forKey: "holdToTalk") }
+        set { defaults.set(newValue, forKey: "holdToTalk") }
+    }
+
+    static var duckMusic: Bool {
+        get { defaults.bool(forKey: "duckMusic") }
+        set { defaults.set(newValue, forKey: "duckMusic") }
+    }
+
+    /// Set while the volume is turned down, so a quit or crash mid-dictation
+    /// can be put right on the next launch: [original, lowered, device].
+    static var duckedVolume: [Double]? {
+        get { defaults.array(forKey: "duckedVolume") as? [Double] }
+        set { defaults.set(newValue, forKey: "duckedVolume") }
+    }
+
+    /// Apps (by bundle id) where dictations use casual style.
+    static var casualApps: Set<String> {
+        get { Set(defaults.stringArray(forKey: "casualApps") ?? []) }
+        set { defaults.set(newValue.sorted(), forKey: "casualApps") }
     }
 
     /// Set once, so the first launch can turn on Open at Login without overriding a later "off".
@@ -60,5 +87,15 @@ enum Settings {
     /// Read fresh for every dictation, so edits work straight away.
     static func words() -> [WordEntry] {
         WordList.parse((try? String(contentsOf: wordListURL, encoding: .utf8)) ?? "")
+    }
+
+    static func saveWords(_ entries: [WordEntry]) {
+        try? WordList.text(for: entries).write(to: wordListURL, atomically: true, encoding: .utf8)
+    }
+
+    /// ~/Library/Application Support/Murmur/snippets.json
+    static var snippets: [Snippet] {
+        get { Snippets.decode(try? Data(contentsOf: folder.appending(path: "snippets.json"))) }
+        set { try? Snippets.encode(newValue).write(to: folder.appending(path: "snippets.json"), options: .atomic) }
     }
 }

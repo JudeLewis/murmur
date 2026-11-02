@@ -9,6 +9,7 @@ let package = Package(
     products: [
         .library(name: "MurmurCore", targets: ["MurmurCore"]),
         .library(name: "MurmurSpeech", targets: ["MurmurSpeech"]),
+        .library(name: "MurmurUI", targets: ["MurmurUI"]),
     ],
     dependencies: [
         // Speech to text on the device (Parakeet models). `traits: []` leaves out
@@ -23,11 +24,13 @@ let package = Package(
             name: "MurmurSpeech",
             dependencies: [.product(name: "FluidAudio", package: "FluidAudio")]
         ),
+        // Screens shared by the Mac and the iPhone (the word list and snippets).
+        .target(name: "MurmurUI", dependencies: ["MurmurCore"]),
         // The Mac menu bar app.
         .executableTarget(
             name: "Murmur",
-            dependencies: ["MurmurCore", "MurmurSpeech"]
+            dependencies: ["MurmurCore", "MurmurSpeech", "MurmurUI"]
         ),
-        .testTarget(name: "MurmurCoreTests", dependencies: ["MurmurCore"]),
+        .testTarget(name: "MurmurCoreTests", dependencies: ["MurmurCore", "MurmurUI"]),
     ]
 )

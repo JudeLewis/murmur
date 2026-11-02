@@ -6,11 +6,11 @@ The project's memory: how the pieces fit, where things live, and why each choice
 
 1. **Launch** (AppDelegate). Murmur adds its wave icon to the menu bar, asks for the microphone and Accessibility, starts watching the keyboard (FnKeyMonitor), and loads the speech model in the background (Transcriber). Once Accessibility is allowed, the pill says "Murmur is ready".
 2. **Fn, Fn** (FnKeyMonitor, then FnWatcher and DoubleTapDetector in MurmurCore). An event tap passes every key straight on to the app in front, and hands Fn's presses and releases to FnWatcher, which decides when they make a double tap. Escape is reported the same way.
-3. **Listening** (DictationFlow, Recorder, Pill). The on/off switch moves to recording. A fresh Recorder takes the default microphone into memory, mixed to mono. A timer feeds its loudness to the pill's bars 20 times a second. A 15-minute limit stops it if forgotten.
+3. **Listening** (DictationFlow, Recorder, Pill). Holding Fn for half a second also starts it (FnWatcher's hold, checked by a timer since nothing else happens while a key is held); letting go is step 4. The volume drops to a quarter (Ducking, SystemVolume). The on/off switch moves to recording. A fresh Recorder takes the default microphone into memory, mixed to mono. A timer feeds its loudness to the pill's bars 20 times a second. A 15-minute limit stops it if forgotten.
 4. **Fn, Fn again**. The switch moves to transcribing. The recorder stops and hands over its samples.
 5. **Speech to text** (Transcriber). The samples are resampled to 16 kHz, padded to at least a second, and given to Parakeet through FluidAudio's AsrManager. Bark 3.0 Clean writes the text without fillers.
-6. **Tidying** (Tidy, BritishSpelling, WordList in MurmurCore). Spaces squeezed, silence dropped, first letter made a capital, British spelling, then Jude's word list, which always has the last say.
-7. **Pasting** (Paster). The text goes on the clipboard, Murmur presses Command-V, then puts back the old clipboard after 0.6 seconds. The text is added to Recent.
+6. **Tidying** (Tidy.dictation in MurmurCore). Spaces squeezed, silence dropped, first letter made a capital, British spelling, Jude's word list, then "press enter" taken off the end, "new line" and "new paragraph" turned into breaks, casual style if the app in front is ticked, and last snippets, so their saved text is never changed.
+7. **Pasting** (Paster). The text goes on the clipboard, Murmur presses Command-V, then puts back the old clipboard after 0.6 seconds, and presses Return if "press enter" was said. The text is added to Recent.
 8. **Done**. The switch goes back to idle. If anything failed, the recording is kept so the menu can offer "Try the last recording again".
 
 ## One dictation from the iPhone keyboard
@@ -27,7 +27,8 @@ The project's memory: how the pieces fit, where things live, and why each choice
 | --- | --- |
 | The installed app | /Applications/Murmur.app (built into build/Murmur.app first) |
 | Speech models | ~/Library/Application Support/FluidAudio/Models (about 400 MB each) |
-| Jude's word list | ~/Library/Application Support/Murmur/words.txt |
+| Jude's word list | ~/Library/Application Support/Murmur/words.txt (edited in the Word list and snippets window) |
+| Snippets | ~/Library/Application Support/Murmur/snippets.json; on iPhone, the app's preferences |
 | Menu choices and recent dictations | Murmur's preferences (`defaults read com.judelewis.murmur`) |
 | Murmur's log | The Mac's system log, subsystem com.judelewis.murmur |
 | Permissions | System Settings > Privacy & Security (Microphone, Accessibility), tied to the app's signature |
@@ -40,6 +41,7 @@ The project's memory: how the pieces fit, where things live, and why each choice
 ## Changing things safely
 
 - **New rule about text or keys**: put it in MurmurCore as a plain function, test it, then call it from the app.
+- **The word list and snippets screens**: one SwiftUI view in Sources/MurmurUI used by both the Mac window and the iPhone app; each platform only says where things are saved.
 - **New menu option**: add its setting to Settings.swift, its item to `menuNeedsUpdate` in AppDelegate.swift, and a line to SPEC.md 6.3.
 - **New pill message**: add it to SPEC.md 5 and keep it short and plain.
 - **Upgrading FluidAudio**: change the version in Package.swift, run `swift package resolve --disable-dependency-cache`, then `./scripts/check-speech.sh`.
@@ -96,3 +98,15 @@ Jude chose a keyboard (option B) over an app on the Action button (A) and a Shor
 ## The logo (chosen 2 Nov 2026)
 
 A flowing wave of white starlings on a dusk sky, navy to purple to coral: a murmuration, for the name, shaped like a sound wave. Jude picked it (B1) from two rounds of ideas. It is the app icon on the iPhone and the Mac. The menu bar keeps its simple wave symbol, because a flock of dots turns to noise at menu bar size.
+
+## Wispr Flow features (added 2 Nov 2026)
+
+Jude asked for Wispr Flow's best ideas and picked six: snippets, spoken commands, a proper word list screen with fixes from recent dictations, casual style, hold Fn, and music down. All run on the device, free.
+
+- **One order for everything after the model** (Tidy.dictation), tested as a whole, so the Mac and iPhone can't drift apart.
+- **Snippets last**, so British spelling or casual style never touch an email address or a sign-off.
+- **Casual style per app on the Mac, a switch on the iPhone.** The Mac knows which app is in front; an iPhone keyboard isn't told which app it's typing into.
+- **Fixes from a corrected dictation** compare words, not letters, and only suggest changes of up to four words, so rewording a sentence doesn't fill the word list.
+- **Hold Fn** waits half a second, longer than a tap, so double tap still works and Fn+key shortcuts throw the recording away rather than leaving Murmur listening.
+- **Music down** lowers the whole Mac's volume, since there's no general way to lower just other apps. It goes back only if untouched, so Murmur never undoes a change you made.
+- **The keyboard looks like Wispr Flow's**: a top bar for talking and number and punctuation keys for small edits, so you don't need to switch keyboards as often.

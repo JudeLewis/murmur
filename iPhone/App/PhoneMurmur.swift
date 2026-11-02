@@ -1,6 +1,7 @@
 import AVFoundation
 import MurmurCore
 import MurmurSpeech
+import MurmurUI
 import Observation
 import UIKit
 import os
@@ -17,7 +18,12 @@ final class PhoneMurmur {
     var phase: DictationPhase { flow.phase }
     var sessionOn: Bool { session.isOn }
     /// 0 to 100 while the model gets ready; nil once it's ready.
-    private(set) var preparing: Int? = 0
+    private(set) var preparing: Int? = 0 {
+        // The phone mustn't lock mid-way: getting ready can take minutes after an update.
+        didSet { UIApplication.shared.isIdleTimerDisabled = preparing != nil }
+    }
+    /// When getting ready started, for the timer on screen.
+    private(set) var preparingSince: Date?
     private(set) var modelProblem: String?
     private(set) var micProblem: String?
     /// The last dictation from the app's own Talk button.
@@ -29,7 +35,13 @@ final class PhoneMurmur {
     private(set) var recent: RecentList
     var tidy: Bool { didSet { defaults.set(tidy, forKey: "tidy"); loadModel() } }
     var british: Bool { didSet { defaults.set(british, forKey: "british") } }
-    var wordList: String { didSet { defaults.set(wordList, forKey: "words") } }
+    /// The word list and snippets screens.
+    @ObservationIgnored private(set) lazy var words = WordsModel(
+        words: WordList.parse(defaults.string(forKey: "words") ?? WordList.template),
+        snippets: Snippets.decode(defaults.data(forKey: "snippets")),
+        recent: { [weak self] in self?.recent.items ?? [] },
+        saveWords: { [weak self] in self?.defaults.set(WordList.text(for: $0), forKey: "words") },
+        saveSnippets: { [weak self] in self?.defaults.set(Snippets.encode($0), forKey: "snippets") })
 
     private let defaults = UserDefaults.standard
     private let transcriber = Transcriber()
@@ -43,10 +55,13 @@ final class PhoneMurmur {
     private var result: PhoneResult?
     /// The app's Talk button turned the microphone on just for one dictation.
     private var endAfterDictation = false
+    /// The keyboard's casual switch when this recording started.
+    private var casual = false
     /// Only the newest model load may say the model is ready.
     private var loadNumber = 0
     @ObservationIgnored private var heartbeat: Timer?
     @ObservationIgnored private var longestRecording: Timer?
+    @ObservationIgnored private var levelTimer: Timer?
 
     private var model: SpeechModel { tidy ? .tidy : .exact }
 
@@ -54,7 +69,6 @@ final class PhoneMurmur {
         defaults.register(defaults: ["tidy": true, "british": true, "words": WordList.template])
         tidy = defaults.bool(forKey: "tidy")
         british = defaults.bool(forKey: "british")
-        wordList = defaults.string(forKey: "words") ?? WordList.template
         recent = RecentList(items: defaults.stringArray(forKey: "recent") ?? [])
 
         trace("app opened")
@@ -84,6 +98,7 @@ final class PhoneMurmur {
         loadNumber += 1
         let number = loadNumber
         preparing = 0
+        preparingSince = .now
         modelProblem = nil
         publish()
         Task {
@@ -114,7 +129,9 @@ final class PhoneMurmur {
     }
 
     private func modelReady() {
+        if let since = preparingSince { trace("model took \(Int(Date.now.timeIntervalSince(since))) seconds") }
         preparing = nil
+        preparingSince = nil
         modelProblem = nil
         // 400 MB that can be downloaded again: keep it out of iCloud backups.
         var folder = URL.applicationSupportDirectory.appending(path: "FluidAudio", directoryHint: .isDirectory)
@@ -166,6 +183,7 @@ final class PhoneMurmur {
         if flow.cancel() == .cancelRecording {
             _ = mic.endCapture()
             longestRecording?.invalidate()
+            levelTimer?.invalidate()
         }
         mic.stop()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -238,7 +256,7 @@ final class PhoneMurmur {
                 let wasOn = sessionOn
                 guard await startSession() else { return }
                 if !wasOn { endAfterDictation = true }
-                if flow.handle(.start) == .startRecording { startRecording(id: 0) }
+                if flow.handle(.start) == .startRecording { startRecording(id: 0, casual: false) }
             }
         case .recording:
             if flow.handle(.stop) == .stopAndTranscribe { stopAndWrite() }
@@ -253,23 +271,29 @@ final class PhoneMurmur {
         lastRequest = request.id
         trace("keyboard asked to \(request.kind.rawValue)")
         guard sessionOn else { return }
+        if request.kind == .turnOff {
+            endSession("turned off from the keyboard")
+            return
+        }
         // A keyboard dictation keeps the session going, even if the app's Talk button started it.
         endAfterDictation = false
         switch flow.handle(request.kind) {
-        case .startRecording: startRecording(id: request.id)
+        case .startRecording: startRecording(id: request.id, casual: request.casual ?? false)
         case .stopAndTranscribe: stopAndWrite()
         case .cancelRecording:
             _ = mic.endCapture()
             longestRecording?.invalidate()
+            levelTimer?.invalidate()
             trace("recording thrown away")
             publish()
         case .nothing: publish()
         }
     }
 
-    private func startRecording(id: Int) {
+    private func startRecording(id: Int, casual: Bool) {
         mic.beginCapture()
         recording = id
+        self.casual = casual
         result = nil
         note = nil
         session.used(at: .now)
@@ -281,6 +305,11 @@ final class PhoneMurmur {
                 self.stopAndWrite()
             }
         }
+        // The keyboard's moving bars, ten times a second.
+        levelTimer?.invalidate()
+        levelTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.publish() }
+        }
         trace("listening")
         publish()
     }
@@ -288,12 +317,15 @@ final class PhoneMurmur {
     /// Call after `flow` has moved to transcribing.
     private func stopAndWrite() {
         longestRecording?.invalidate()
+        levelTimer?.invalidate()
         let samples = mic.endCapture()
         let sampleRate = mic.sampleRate
         let id = recording
         let model = model
-        let words = WordList.parse(wordList)
+        let words = self.words.rows.compactMap(\.entry)
+        let snippets = self.words.snippets
         let british = british
+        let casual = casual
         trace("writing \(samples.count / max(1, Int(sampleRate))) seconds")
         publish()
         // If the session ends now (a phone call), iOS would pause the app
@@ -303,7 +335,8 @@ final class PhoneMurmur {
             do {
                 let raw = try await transcriber.transcribe(samples, sampleRate: sampleRate, model: model)
                 if preparing != nil || modelProblem != nil { modelReady() }
-                finish(PhoneResult(id: id, text: Tidy.finish(raw, words: words, british: british)))
+                let dictation = Tidy.dictation(raw, words: words, snippets: snippets, british: british, casual: casual)
+                finish(PhoneResult(id: id, text: dictation.text, pressEnter: dictation.pressEnter))
             } catch {
                 finish(PhoneResult(id: id, text: "", problem: "Couldn't turn that into text."))
             }
@@ -320,7 +353,10 @@ final class PhoneMurmur {
             defaults.set(recent.items, forKey: "recent")
         }
         if finished.id == 0 {
-            if finished.text.isEmpty {
+            if finished.text.isEmpty && finished.pressEnter == true {
+                lastText = nil
+                note = nil
+            } else if finished.text.isEmpty {
                 lastText = nil
                 note = finished.problem ?? "Didn't catch that."
             } else {
@@ -350,6 +386,7 @@ final class PhoneMurmur {
         status.preparing = preparing
         status.heartbeat = .now
         status.result = result
+        status.level = flow.phase == .recording ? mic.level : nil
         store.save(status)
         if ring { Bell.ring(Bell.toKeyboard) }
     }

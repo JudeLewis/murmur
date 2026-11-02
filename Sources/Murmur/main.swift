@@ -13,7 +13,7 @@ if let index = CommandLine.arguments.firstIndex(of: "--transcribe"), index + 1 <
             Settings.registerDefaults()
             let samples = try Transcriber.samples(fromFile: url)
             let raw = try await Transcriber().transcribe(samples, sampleRate: 16_000, model: model)
-            print(Tidy.finish(raw, words: Settings.words(), british: Settings.british))
+            print(Tidy.dictation(raw, words: Settings.words(), snippets: Settings.snippets, british: Settings.british).text)
             exit(0)
         } catch {
             FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))

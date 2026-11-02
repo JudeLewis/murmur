@@ -11,6 +11,20 @@ public struct WordEntry: Equatable, Sendable {
     }
 }
 
+extension WordEntry {
+    /// From the word list screen's two boxes. "Write it as" empty with "When it
+    /// hears" filled removes that word. Nil when there's nothing to save, or the
+    /// entry wouldn't read back from words.txt (an arrow inside, or a # at the start).
+    public static func fromForm(written: String, heard: String) -> WordEntry? {
+        let written = written.trimmingCharacters(in: .whitespaces)
+        let heard = heard.trimmingCharacters(in: .whitespaces)
+        let entry = WordEntry(heard: heard.isEmpty ? written : heard, written: written)
+        guard !entry.heard.isEmpty, !entry.heard.hasPrefix("#") else { return nil }
+        guard !["->", "=>", "\u{2192}"].contains(where: { entry.heard.contains($0) || entry.written.contains($0) }) else { return nil }
+        return entry
+    }
+}
+
 /// The user's own word list, kept as a plain text file they edit in TextEdit.
 ///
 /// Each line is either a word or name to always write exactly as typed
@@ -50,6 +64,17 @@ public enum WordList {
             }
             return WordEntry(heard: line, written: line)
         }
+    }
+
+    /// Writes entries back as the file's text, for the word list screens.
+    public static func text(for entries: [WordEntry]) -> String {
+        let header = """
+            # Murmur word list. Edit it from the Murmur menu (Mac) or the Murmur app (iPhone).
+            # Each line is a word to always write like this, or "heard -> written".
+
+            """
+        let lines = entries.map { $0.heard == $0.written ? $0.written : "\($0.heard) -> \($0.written)" }
+        return header + lines.joined(separator: "\n") + (lines.isEmpty ? "" : "\n")
     }
 
     /// Applies every entry, longest first so "Clocked In app" wins over "Clocked In".

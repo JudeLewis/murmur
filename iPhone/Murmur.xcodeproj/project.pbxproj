@@ -11,6 +11,7 @@
 		4D55524D0000000000000051 /* MurmurCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4D55524D0000000000000061 /* MurmurCore */; };
 		4D55524D0000000000000052 /* MurmurSpeech in Frameworks */ = {isa = PBXBuildFile; productRef = 4D55524D0000000000000062 /* MurmurSpeech */; };
 		4D55524D0000000000000053 /* MurmurCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4D55524D0000000000000063 /* MurmurCore */; };
+		4D55524D0000000000000054 /* MurmurUI in Frameworks */ = {isa = PBXBuildFile; productRef = 4D55524D0000000000000064 /* MurmurUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +68,7 @@
 			files = (
 				4D55524D0000000000000051 /* MurmurCore in Frameworks */,
 				4D55524D0000000000000052 /* MurmurSpeech in Frameworks */,
+				4D55524D0000000000000054 /* MurmurUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,6 +127,7 @@
 			packageProductDependencies = (
 				4D55524D0000000000000061 /* MurmurCore */,
 				4D55524D0000000000000062 /* MurmurSpeech */,
+				4D55524D0000000000000064 /* MurmurUI */,
 			);
 			productName = MurmurPhone;
 			productReference = 4D55524D0000000000000010 /* MurmurPhone.app */;
@@ -416,6 +419,10 @@
 		4D55524D0000000000000063 /* MurmurCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MurmurCore;
+		};
+		4D55524D0000000000000064 /* MurmurUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MurmurUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
