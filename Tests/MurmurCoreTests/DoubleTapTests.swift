@@ -102,3 +102,58 @@ struct DictationFlowTests {
         #expect(flow.retry() == false)
     }
 }
+
+@Suite("2.1 Double tap Fn: keyboard events")
+struct FnWatcherTests {
+    private func fn(_ held: Bool, code: Int64 = 63) -> KeyEvent { .modifiersChanged(keyCode: code, fnHeld: held) }
+
+    /// The taps from Jude's MacBook Air log on 2 Nov 2026: about 60 ms held, 80 ms apart.
+    @Test func realTapsFromTheLog() {
+        var watcher = FnWatcher()
+        #expect(watcher.handle(fn(true), at: 870547.282) == .nothing)
+        #expect(watcher.handle(fn(false), at: 870547.338) == .nothing)
+        #expect(watcher.handle(fn(true), at: 870547.424) == .nothing)
+        #expect(watcher.handle(fn(false), at: 870547.483) == .doubleTap)
+    }
+
+    @Test func theGlobeKeysOwnKeyPressDoesNotBreakTheDoubleTap() {
+        var watcher = FnWatcher()
+        _ = watcher.handle(fn(true), at: 0)
+        _ = watcher.handle(.keyDown(keyCode: 179), at: 0.01)
+        _ = watcher.handle(fn(false), at: 0.06)
+        _ = watcher.handle(fn(true), at: 0.15)
+        _ = watcher.handle(.keyDown(keyCode: 179), at: 0.16)
+        #expect(watcher.handle(fn(false), at: 0.2) == .doubleTap)
+    }
+
+    @Test func globeKeyCodeWorksAsFn() {
+        var watcher = FnWatcher()
+        _ = watcher.handle(fn(true, code: 179), at: 0)
+        _ = watcher.handle(fn(false, code: 179), at: 0.05)
+        _ = watcher.handle(fn(true, code: 179), at: 0.15)
+        #expect(watcher.handle(fn(false, code: 179), at: 0.2) == .doubleTap)
+    }
+
+    @Test func fnWithALetterIsNotATap() {
+        var watcher = FnWatcher()
+        _ = watcher.handle(fn(true), at: 0)
+        _ = watcher.handle(.keyDown(keyCode: 0), at: 0.02)
+        _ = watcher.handle(fn(false), at: 0.05)
+        _ = watcher.handle(fn(true), at: 0.15)
+        #expect(watcher.handle(fn(false), at: 0.2) == .nothing)
+    }
+
+    @Test func fnWithShiftIsNotATap() {
+        var watcher = FnWatcher()
+        _ = watcher.handle(fn(true), at: 0)
+        _ = watcher.handle(.modifiersChanged(keyCode: 56, fnHeld: true), at: 0.02)
+        _ = watcher.handle(fn(false), at: 0.05)
+        _ = watcher.handle(fn(true), at: 0.15)
+        #expect(watcher.handle(fn(false), at: 0.2) == .nothing)
+    }
+
+    @Test func escapeIsReported() {
+        var watcher = FnWatcher()
+        #expect(watcher.handle(.keyDown(keyCode: 53), at: 0) == .escape)
+    }
+}

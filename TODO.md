@@ -4,7 +4,7 @@ Live work only. Finished items move to archive/.
 
 ## Now
 
-- [ ] Jude's first real test: dictate into Notes, Messages, a browser and VS Code. Note anything it gets wrong, and any words to add to the word list.
+- [ ] Jude uses it for a few days: note anything it gets wrong, and words to add to the word list.
 
 ## Ideas, not started
 

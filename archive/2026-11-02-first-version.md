@@ -9,3 +9,5 @@ Built in one session, started from the Clocked In folder and moved here.
 - The pill, the menu, sounds, Escape to cancel, 15-minute limit, retry a failed recording.
 - Permission checks for microphone, Accessibility and the Fn key setting; Open at Login on first run.
 - Install script, speech check script, 30 unit tests, pre-commit hook, CI.
+- First real test by Jude failed: the 🌐 key's extra key press (179) cancelled every double tap. Fixed, with tests from the real timings in the log; Jude confirmed it works.
+- Added Murmur's own log (Log.swift).

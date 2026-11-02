@@ -25,7 +25,7 @@ Separate from Clocked In (~/Developer/clocked-in). Never touch that folder from 
 | check the speech model end to end | `./scripts/check-speech.sh` (makes speech with `say`, transcribes it, prints OK or NOT OK) |
 | try any recording | `.build/debug/Murmur --transcribe file.wav [--exact]` |
 | install and run Jude's copy | `./scripts/install.sh` (build, wrap as Murmur.app, sign, copy to /Applications, open) |
-| watch the app's logs | `log stream --predicate 'process == "Murmur"'` |
+| read the app's log | `/usr/bin/log show --last 10m --predicate 'subsystem == "com.judelewis.murmur"' --style compact` |
 
 The pre-commit hook (.githooks/pre-commit) runs `swift build` and `swift test`. A fresh clone needs `git config core.hooksPath .githooks` once.
 
@@ -34,6 +34,7 @@ The pre-commit hook (.githooks/pre-commit) runs `swift build` and `swift test`. 
 ```
 Sources/MurmurCore/        Plain logic, no AppKit or audio; all of it tested
   DoubleTap.swift          When Fn presses and releases make a double tap
+  FnWatcher.swift          Raw key events to "double tap" or "Escape"
   DictationFlow.swift      The on/off switch: idle, recording, transcribing
   Tidy.swift               Model text to pasted text; the recent list
   BritishSpelling.swift    American to British spelling, from a fixed word list
@@ -48,6 +49,7 @@ Sources/Murmur/            The app: wires the logic to the Mac
   Pill.swift               The black pill at the bottom of the screen
   Permissions.swift        Microphone, Accessibility, and the Fn key setting
   Settings.swift           Menu choices and where the word list lives
+  Log.swift                The app's log: Fn timings and what Murmur did, never words or typed keys
 Tests/MurmurCoreTests/     Unit tests, named by SPEC.md section
 Resources/Info.plist       Bundle id com.judelewis.murmur; menu bar only; microphone reason
 scripts/                   install.sh, check-speech.sh
@@ -71,6 +73,9 @@ archive/                   Finished TODO items
 Format: **Rule**: why it matters.
 
 - **In Claude's sandbox, fetch packages with `--disable-dependency-cache`**: `swift package resolve` failed on 2 Nov 2026 because the shared cache in ~/Library/Caches is out of bounds. `swift build` and `swift test` work once packages are fetched.
+- **The 🌐 key sends its own key press (code 179) as well as Fn (63)**: Murmur counted it as "another key" and the double tap never fired on Jude's MacBook Air (2 Nov 2026). FnWatcher ignores Fn's own codes. Enforced by the "2.1 Double tap Fn: keyboard events" tests.
+- **Use `/usr/bin/log`, not `log`**: in zsh `log` is a built-in command, so `log show` fails with "too many arguments" (2 Nov 2026).
+- **Don't use `CGEvent.timestamp` for timing**: on Apple silicon it counts clock ticks, not nanoseconds. FnKeyMonitor uses `ProcessInfo.systemUptime` (2 Nov 2026).
 - **The first load of each speech model takes about a minute**: macOS prepares the model for the Neural Engine once; later loads take under a second (seen 2 Nov 2026). Not a hang.
 
 ## Sources of truth

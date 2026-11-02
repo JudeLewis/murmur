@@ -11,13 +11,8 @@ final class FnKeyMonitor {
     var onDoubleTap: () -> Void = {}
     var onEscape: () -> Void = {}
 
-    private var detector = DoubleTapDetector()
-    private var fnIsDown = false
+    private var watcher = FnWatcher()
     private var tap: CFMachPort?
-
-    /// Fn on Mac keyboards; some report the globe key as 179.
-    private static let fnKeyCodes: Set<Int64> = [63, 179]
-    private static let escapeKeyCode: Int64 = 53
 
     var isRunning: Bool { tap != nil }
 
@@ -33,38 +28,45 @@ final class FnKeyMonitor {
             eventsOfInterest: CGEventMask(mask),
             callback: fnTapCallback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ) else { return false }
+        ) else {
+            log.notice("Keyboard watch not allowed yet (Accessibility: \(AXIsProcessTrusted()))")
+            return false
+        }
 
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
         self.tap = tap
+        log.notice("Watching the keyboard for Fn")
         return true
     }
 
     fileprivate func handle(type: CGEventType, keyCode: Int64, fnHeld: Bool, time: TimeInterval) {
+        let event: KeyEvent
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             // macOS switches a slow tap off; switch it back on.
+            log.notice("macOS switched the keyboard watch off; switching it back on")
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
-
-        case .flagsChanged where Self.fnKeyCodes.contains(keyCode):
-            if fnHeld, !fnIsDown {
-                fnIsDown = true
-                detector.keyDown(at: time)
-            } else if !fnHeld, fnIsDown {
-                fnIsDown = false
-                if detector.keyUp(at: time) { onDoubleTap() }
-            }
-
+            return
         case .flagsChanged:
-            detector.otherKey()  // Shift, Command, Option, Control
-
+            event = .modifiersChanged(keyCode: keyCode, fnHeld: fnHeld)
+            log.notice("Modifier key \(keyCode), Fn held: \(fnHeld)")
         case .keyDown:
-            detector.otherKey()
-            if keyCode == Self.escapeKeyCode { onEscape() }
-
+            event = .keyDown(keyCode: keyCode)
+            // Logged only while Fn is held (Fn's own codes, Fn+arrow), never ordinary typing.
+            if fnHeld || FnWatcher.fnKeyCodes.contains(keyCode) { log.notice("Key \(keyCode) pressed with Fn") }
         default:
+            return
+        }
+
+        switch watcher.handle(event, at: time) {
+        case .doubleTap:
+            log.notice("Double tap")
+            onDoubleTap()
+        case .escape:
+            onEscape()
+        case .nothing:
             break
         }
     }
@@ -77,7 +79,8 @@ private func fnTapCallback(
     if let refcon {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let fnHeld = event.flags.contains(.maskSecondaryFn)
-        let time = TimeInterval(event.timestamp) / 1_000_000_000
+        // Not event.timestamp: on Apple silicon it counts clock ticks, not nanoseconds.
+        let time = ProcessInfo.processInfo.systemUptime
         let monitor = Unmanaged<FnKeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
         MainActor.assumeIsolated {
             monitor.handle(type: type, keyCode: keyCode, fnHeld: fnHeld, time: time)

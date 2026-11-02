@@ -49,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func askForPermissions() async {
         await Permissions.askForMicrophone()
+        log.notice("Started. Microphone: \(Permissions.microphoneAllowed), Accessibility: \(AXIsProcessTrusted()), Fn does nothing: \(Permissions.fnKeyDoesNothing)")
         if keys.start() { return }
 
         if AXIsProcessTrusted() {
@@ -74,7 +75,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Dictation
 
     private func toggle() {
-        switch flow.toggle() {
+        let action = flow.toggle()
+        log.notice("Toggle: \(String(describing: action), privacy: .public)")
+        switch action {
         case .startRecording: startRecording()
         case .stopAndTranscribe: stopAndTranscribe()
         case .cancelRecording, .nothing: break
@@ -93,6 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func startRecording() {
         guard Permissions.microphoneAllowed else {
+            log.notice("Can't record: microphone not allowed")
             flow.finished()
             pill.flash("Murmur needs the microphone. Click the Murmur icon in the menu bar.", seconds: 5)
             return
@@ -100,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         do {
             recorder = try Recorder()
         } catch {
+            log.error("Microphone failed to start: \(error.localizedDescription)")
             flow.finished()
             pill.flash("Couldn't start the microphone.", seconds: 4)
             return
@@ -128,6 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         self.recorder = nil
         let samples = recorder.stop()
+        log.notice("Recorded \(Double(samples.count) / recorder.sampleRate, format: .fixed(precision: 1)) s at \(Int(recorder.sampleRate)) Hz")
         playSound("Pop")
         transcribe(samples, sampleRate: recorder.sampleRate)
     }
@@ -142,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if Settings.model == model { loading = .ready }
                 deliver(raw)
             } catch {
+                log.error("Transcription failed: \(error.localizedDescription)")
                 unsent = (samples, sampleRate)
                 flow.finished()
                 updateIcon()
@@ -155,6 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         flow.finished()
         updateIcon()
 
+        log.notice("Wrote \(text.count) characters")
         guard !text.isEmpty else {
             pill.flash("Didn't catch that.", seconds: 1.5)
             return
@@ -164,8 +172,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Settings.recent = recent
 
         if Paster.paste(Tidy.forInsertion(text)) {
+            log.notice("Pasted")
             pill.hide()
         } else {
+            log.notice("Not allowed to paste; left on the clipboard")
             pill.flash("Copied. Press ⌘V to paste.", seconds: 4)
         }
     }
@@ -196,8 +206,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         self.loading = .loading(fraction)
                     }
                 }
+                log.notice("Speech model ready: \(model.rawValue, privacy: .public)")
                 if Settings.model == model { loading = .ready }
             } catch {
+                log.error("Speech model failed to load: \(error.localizedDescription)")
                 if Settings.model == model { loading = .failed }
             }
         }

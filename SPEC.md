@@ -12,7 +12,7 @@ Talk instead of typing, in any app. Double-tap Fn, speak, double-tap Fn again, a
 
 - A tap is a press and release of Fn (the 🌐 key) lasting under 0.35 seconds.
 - Two taps make a double tap when the second press comes within 0.4 seconds of the first release.
-- Any other key or modifier pressed during or between the taps cancels it, so Fn used with another key (Fn+arrow, Fn+F5) never starts dictation.
+- Any other key or modifier pressed during or between the taps cancels it, so Fn used with another key (Fn+arrow, Fn+F5) never starts dictation. The 🌐 key's own extra key press (code 179) doesn't count as another key.
 - A third quick tap does not count twice: after a double tap, two fresh taps are needed.
 
 ### 2.2 On and off
@@ -125,3 +125,4 @@ The first time Murmur runs from Applications, it turns on Open at Login. After t
 - Audio stays in memory and is never saved to disk or sent anywhere.
 - The internet is used only to download the speech models.
 - Recent dictations are kept in Murmur's settings on this Mac only.
+- Murmur's log (in the Mac's system log) holds Fn timings, modifier key codes and what Murmur did, such as "Wrote 84 characters". Never the words, and never ordinary typed keys.
