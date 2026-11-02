@@ -8,6 +8,8 @@ Live work only. Finished items move to archive/.
 
 ## Ideas, not started
 
+- [ ] Murmur on Jude's iPhone 16 (asked 2 Nov 2026, not decided). Option A: an iPhone app started by the Action button or Control Centre; it transcribes on the phone with the same model and copies the text to paste. Option B: a Murmur keyboard that types straight into any app, like Wispr Flow's; iOS doesn't let keyboards use the microphone, so it must hand off to the main app, which makes it more work. Install from the Mac with Jude's developer account, no App Store. Share MurmurCore (word list, British spelling, tidying).
+
 - [ ] Word list guides the model while it listens, not just fixes text afterwards (FluidAudio's custom vocabulary boosting; about 130 MB more to download).
 - [ ] Choose the microphone in the menu. Today it uses the Mac's default input.
 - [ ] Spoken commands: "new line", "new paragraph".
