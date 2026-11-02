@@ -1,0 +1,6 @@
+#!/bin/sh
+# Runs before every commit: the app must build and the tests must pass.
+# Turned on once per clone with: git config core.hooksPath .githooks
+set -e
+swift build
+swift test
