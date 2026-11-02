@@ -4,14 +4,15 @@
 
 A Mac menu bar app for dictation: a free replacement for Wispr Flow and for Apple's own dictation, which Jude found missed too much of what they said. Double-tap Fn to start listening, double-tap Fn again to stop, and the text appears wherever the cursor is, in any app. Speech turns into text on the Mac itself, with NVIDIA's Parakeet model (the Bark 3.0 Clean version, which drops "um", false starts and repeated words). Nothing leaves the Mac.
 
-Built for one person: Jude, on an M3 MacBook Air with 16 GB, macOS 26. Not for sale or the App Store. Jude is not a coder: read docs/working-with-jude.md before replying.
+Built for one person: Jude, on an M3 MacBook Air with 16 GB, macOS 26, and on their iPhone 16 as an app plus a keyboard (SPEC.md 9). Not for sale or the App Store. Jude is not a coder: read docs/working-with-jude.md before replying.
 
 Separate from Clocked In (~/Developer/clocked-in). Never touch that folder from here.
 
 ## Stack
 
-- Swift 6.2 and Swift Package Manager. No Xcode project: everything is plain text files.
+- Swift 6.2 and Swift Package Manager for the Mac app, with no Xcode project. Everything is plain text files.
 - AppKit for the menu bar, the event tap and the floating pill; SwiftUI inside the pill.
+- iPhone: an app and a keyboard extension in SwiftUI and UIKit, built from iPhone/Murmur.xcodeproj (written by hand; its folders App, Keyboard and Shared are picked up automatically, so new files need no project edits). It uses MurmurCore and MurmurSpeech from the Swift package.
 - FluidAudio (github.com/FluidInference/FluidAudio) for speech to text, with `traits: []` so only its speech-to-text part is built.
 - Swift Testing for unit tests (`import Testing`, `@Test`, `#expect`).
 - Signed with Jude's Apple Development certificate, so macOS permissions survive rebuilds.
@@ -25,9 +26,11 @@ Separate from Clocked In (~/Developer/clocked-in). Never touch that folder from 
 | check the speech model end to end | `./scripts/check-speech.sh` (makes speech with `say`, transcribes it, prints OK or NOT OK) |
 | try any recording | `.build/debug/Murmur --transcribe file.wav [--exact]` |
 | install and run Jude's copy | `./scripts/install.sh` (build, wrap as Murmur.app, sign, copy to /Applications, open) |
+| install on Jude's iPhone | `./scripts/install-phone.sh` (build, sign, install, open; phone unlocked, plugged in or on the same Wi-Fi) |
+| read the iPhone's trace | `xcrun devicectl device copy from --device 00008140-000834E10E82801C --domain-type appGroupDataContainer --domain-identifier group.com.judelewis.murmur --source Library/Murmur/trace-app.txt --destination <scratchpad>/trace-app.txt` (also trace-keyboard.txt, status.json) |
 | read the app's log | `/usr/bin/log show --last 10m --predicate 'subsystem == "com.judelewis.murmur"' --style compact` |
 
-The pre-commit hook (.githooks/pre-commit) runs `swift build` and `swift test`. A fresh clone needs `git config core.hooksPath .githooks` once.
+The pre-commit hook (.githooks/pre-commit) runs `swift build` and `swift test`, and builds the iPhone app when anything it uses has changed. A fresh clone needs `git config core.hooksPath .githooks` once.
 
 ## Folder map
 
@@ -39,20 +42,32 @@ Sources/MurmurCore/        Plain logic, no AppKit or audio; all of it tested
   Tidy.swift               Model text to pasted text; the recent list
   BritishSpelling.swift    American to British spelling, from a fixed word list
   WordList.swift           Jude's own word list (words.txt)
+  PhoneLink.swift          iPhone: what the keyboard shows, sends and types; the 10 minute session
+  LinkStore.swift          iPhone: the files the app and keyboard share, and their trace
+Sources/MurmurSpeech/      Shared by Mac and iPhone: needs FluidAudio or the microphone
+  Transcriber.swift        Loading the Parakeet model and transcribing
+  SpeechModel.swift        Tidy (Bark 3.0 Clean) or exact (Bark 3.0)
+  MonoMix.swift            One microphone buffer to mono samples and a loudness level
 Sources/Murmur/            The app: wires the logic to the Mac
   main.swift               Starts the app; also the --transcribe test mode
   AppDelegate.swift        Menu bar, and each dictation from microphone to paste
   FnKeyMonitor.swift       Event tap that spots Fn and Escape
   Recorder.swift           Microphone into memory
-  Transcriber.swift        Loading the Parakeet model and transcribing
   Paster.swift             Clipboard and Command-V, then restores the clipboard
   Pill.swift               The black pill at the bottom of the screen
   Permissions.swift        Microphone, Accessibility, and the Fn key setting
   Settings.swift           Menu choices and where the word list lives
   Log.swift                The app's log: Fn timings and what Murmur did, never words or typed keys
+iPhone/                    The iPhone app and keyboard
+  Murmur.xcodeproj         Two targets: MurmurPhone (the app) and MurmurKeyboard
+  App/                     PhoneMurmur (model, sessions, answering the keyboard), SessionMic, the screen
+  Keyboard/                KeyboardViewController and KeyboardView
+  Shared/                  The shared folder and Bell (nudges between app and keyboard)
+  Config/                  Info.plist and entitlements for each target
 Tests/MurmurCoreTests/     Unit tests, named by SPEC.md section; RulesTests checks project rules
 Resources/Info.plist       Bundle id com.judelewis.murmur; menu bar only; microphone reason
-scripts/                   install.sh, check-speech.sh
+Resources/Logo/murmur.svg  The logo (B1, starlings at dusk); scripts/make-icons.sh turns it into both app icons
+scripts/                   install.sh, install-phone.sh, check-speech.sh, make-icons.sh
 docs/architecture.md       How a dictation works step by step, where things live, and why
 docs/working-with-jude.md  How Jude likes replies, steps and the way work is done
 archive/                   Finished TODO items
@@ -80,6 +95,9 @@ Format: **Rule**: why it matters.
 - **The 🌐 key sends its own key press (code 179) as well as Fn (63)**: Murmur counted it as "another key" and the double tap never fired on Jude's MacBook Air (2 Nov 2026). FnWatcher ignores Fn's own codes. Enforced by the "2.1 Double tap Fn: keyboard events" tests.
 - **Use `/usr/bin/log`, not `log`**: in zsh `log` is a built-in command, so `log show` fails with "too many arguments" (2 Nov 2026).
 - **Don't use `CGEvent.timestamp` for timing**: on Apple silicon it counts clock ticks, not nanoseconds. FnKeyMonitor uses `ProcessInfo.systemUptime` (2 Nov 2026).
+- **The Mac only sees Library/ inside an iPhone App Group folder**: `devicectl` listed nothing and couldn't copy files at the top of group.com.judelewis.murmur, though the app had written them (2 Nov 2026). The shared files live in Library/Murmur.
+- **Open a newly installed iPhone app by hand the first time**: `devicectl` refused to launch it ("invalid code signature, inadequate entitlements") until Jude tapped the icon once; after that it launched fine (2 Nov 2026).
+- **Every iPhone install makes the model get ready again, for minutes**: iOS drops the copy prepared for the iPhone's chip when the app is reinstalled. On 2 Nov 2026 it took 5.5 minutes and only progressed with the app on screen; Jude saw "Writing" for ages. Later opens of the same install took 0.4 seconds. Bundle phone changes into few installs, and tell Jude to keep Murmur open until Ready after each one.
 - **The first load of each speech model takes about a minute**: macOS prepares the model for the Neural Engine once; later loads take under a second (seen 2 Nov 2026). Not a hang.
 
 ## Sources of truth

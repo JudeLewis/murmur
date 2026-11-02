@@ -1,4 +1,5 @@
 import AVFoundation
+import MurmurSpeech
 import os
 
 /// Records the default microphone into memory, as mono samples at the
@@ -51,24 +52,7 @@ final class Recorder {
     /// Built outside any actor: the audio thread calls it, not the main thread.
     private static func tapBlock(into captured: OSAllocatedUnfairLock<Captured>) -> AVAudioNodeTapBlock {
         { buffer, _ in
-            guard let channels = buffer.floatChannelData else { return }
-            let frames = Int(buffer.frameLength)
-            let channelCount = Int(buffer.format.channelCount)
-            guard frames > 0 else { return }
-
-            var mono = [Float](repeating: 0, count: frames)
-            for channel in 0..<channelCount {
-                let data = channels[channel]
-                for frame in 0..<frames { mono[frame] += data[frame] }
-            }
-            var sumOfSquares: Float = 0
-            for frame in 0..<frames {
-                mono[frame] /= Float(channelCount)
-                sumOfSquares += mono[frame] * mono[frame]
-            }
-            let level = min(1, (sumOfSquares / Float(frames)).squareRoot() * 8)
-
-            let heard = mono
+            guard let (heard, level) = MonoMix.mix(buffer) else { return }
             captured.withLock {
                 $0.samples.append(contentsOf: heard)
                 $0.level = level

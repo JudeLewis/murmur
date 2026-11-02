@@ -13,6 +13,14 @@ The project's memory: how the pieces fit, where things live, and why each choice
 7. **Pasting** (Paster). The text goes on the clipboard, Murmur presses Command-V, then puts back the old clipboard after 0.6 seconds. The text is added to Recent.
 8. **Done**. The switch goes back to idle. If anything failed, the recording is kept so the menu can offer "Try the last recording again".
 
+## One dictation from the iPhone keyboard
+
+1. **Tap Talk with no session** (KeyboardTalker). The keyboard sees no fresh heartbeat in status.json, so it opens murmur://start. Keyboards aren't allowed to open apps, so it finds the app object in its responder chain and calls openURL there.
+2. **The app starts a session** (PhoneMurmur, SessionMic). It turns the microphone on (category playAndRecord, mixing with other audio, iPhone microphone only) and keeps it running, which is what lets iOS keep the app alive in the background. Sound is thrown away as it arrives. A timer updates the heartbeat every 2 seconds and ends the session 10 minutes after the last dictation (PhoneSession). Jude taps ◀ to go back.
+3. **Tap Talk again**. The keyboard writes request.json ("start", with an id) and rings the app's bell (a Darwin notification). The app reads it, DictationFlow decides, and SessionMic starts keeping sound. The app writes status.json and rings the keyboard's bell, so the keyboard shows Listening.
+4. **Tap to stop**. Same route with "stop". The app hands the samples to Transcriber and tidies the text exactly as on the Mac, then puts the result, with the recording's id, in status.json.
+5. **Typing** (KeyboardLink.delivery). The keyboard types the text only if the id is the one it is waiting for, adding spaces as needed (Tidy.forInsertion). Both sides add a line to their trace file.
+
 ## Where things live
 
 | What | Where |
@@ -23,6 +31,11 @@ The project's memory: how the pieces fit, where things live, and why each choice
 | Menu choices and recent dictations | Murmur's preferences (`defaults read com.judelewis.murmur`) |
 | Murmur's log | The Mac's system log, subsystem com.judelewis.murmur |
 | Permissions | System Settings > Privacy & Security (Microphone, Accessibility), tied to the app's signature |
+| The logo and app icons | Resources/Logo/murmur.svg; `./scripts/make-icons.sh` makes iPhone/App/Assets.xcassets/AppIcon.appiconset/AppIcon.png and Resources/AppIcon.icns |
+| iPhone app and keyboard code | iPhone/ (the Xcode project, App, Keyboard, Shared, Config) |
+| iPhone speech model | Inside the app on the phone, Application Support/FluidAudio |
+| iPhone settings, word list and recent | The app's own preferences on the phone |
+| iPhone shared files | App Group group.com.judelewis.murmur, in Library/Murmur: status.json, request.json, trace-app.txt, trace-keyboard.txt |
 
 ## Changing things safely
 
@@ -31,6 +44,7 @@ The project's memory: how the pieces fit, where things live, and why each choice
 - **New pill message**: add it to SPEC.md 5 and keep it short and plain.
 - **Upgrading FluidAudio**: change the version in Package.swift, run `swift package resolve --disable-dependency-cache`, then `./scripts/check-speech.sh`.
 - **Anything that changes behaviour**: SPEC.md in the same change.
+- **A new file for the iPhone**: put it in iPhone/App, iPhone/Keyboard or iPhone/Shared; Xcode picks it up without editing the project. Run `./scripts/install-phone.sh` to try it.
 
 # Why it's built this way
 
@@ -66,3 +80,19 @@ macOS ties the Microphone and Accessibility permissions to the app's signature. 
 ## The word list fixes text afterwards
 
 The simplest approach that works: plain find and replace on whole words. FluidAudio can also use the list to guide the model as it listens (custom vocabulary boosting), at the cost of a second model; that is in TODO.md for if the simple version isn't enough.
+
+## iPhone: a keyboard that asks the app (decided 2 Nov 2026)
+
+Jude chose a keyboard (option B) over an app on the Action button (A) and a Shortcut sending audio online (C), because it types straight into any app, like the Mac. iOS doesn't let keyboards use the microphone, so the app does the listening and writing and the keyboard is only a remote control. Wispr Flow's keyboard works the same way, including the trip to the app to start a session.
+
+- **Two small files and a bell, not shared settings.** status.json and request.json in the App Group folder, each written by one side only, plus a Darwin notification to say "read it". Files are read fresh every time, so there are no stale caches between the two processes.
+- **A heartbeat.** iOS can close the app in the background without warning. The keyboard trusts the session only while the heartbeat is under 6 seconds old, and checks every second.
+- **Start and stop are separate requests, not a toggle,** so a keyboard showing an old state can't stop a recording it meant to start.
+- **The iPhone's own microphone, music left playing.** Letting AirPods be the microphone would drop their sound quality for the whole 10-minute session.
+- **The model stays in the app.** Keyboards get about 50 MB of memory, far too little for a 400 MB model.
+- **A hand-written Xcode project.** Swift Package Manager can't build an iPhone app with a keyboard extension. The project uses folders that Xcode reads automatically, so it rarely needs editing, and no extra tools (like XcodeGen) are needed.
+- **A trace, not just the system log.** Reading an iPhone's log from the Mac is awkward; two small text files in the shared folder can be copied over with one command.
+
+## The logo (chosen 2 Nov 2026)
+
+A flowing wave of white starlings on a dusk sky, navy to purple to coral: a murmuration, for the name, shaped like a sound wave. Jude picked it (B1) from two rounds of ideas. It is the app icon on the iPhone and the Mac. The menu bar keeps its simple wave symbol, because a flock of dots turns to noise at menu bar size.

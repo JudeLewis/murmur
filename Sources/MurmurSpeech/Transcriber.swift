@@ -1,21 +1,23 @@
 import FluidAudio
 import Foundation
 
-/// Turns recorded samples into text with a Parakeet model, on this Mac.
+/// Turns recorded samples into text with a Parakeet model, on this device.
 ///
-/// The model downloads once (about 400 MB) into
-/// ~/Library/Application Support/FluidAudio, then loads from there.
-actor Transcriber {
+/// The model downloads once (about 400 MB) into Application Support/FluidAudio
+/// (in ~/Library on the Mac, in the app's own folder on the iPhone), then loads from there.
+public actor Transcriber {
+    public init() {}
+
     private var loaded: (model: SpeechModel, task: Task<AsrManager, Error>)?
 
     /// Starts loading `model` if it isn't already. Safe to call again; a failed
     /// load is forgotten so the next call tries afresh.
-    func prepare(_ model: SpeechModel, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
+    public func prepare(_ model: SpeechModel, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
         _ = try await manager(for: model, progress: progress)
     }
 
     /// Samples are mono at `sampleRate`; they are resampled to the 16 kHz the model needs.
-    func transcribe(_ samples: [Float], sampleRate: Double, model: SpeechModel) async throws -> String {
+    public func transcribe(_ samples: [Float], sampleRate: Double, model: SpeechModel) async throws -> String {
         let manager = try await manager(for: model)
         var audio = try AudioConverter().resample(samples, from: sampleRate)
 
@@ -24,6 +26,11 @@ actor Transcriber {
 
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
         return try await manager.transcribe(audio, decoderState: &state).text
+    }
+
+    /// For test mode: reads a sound file as mono 16 kHz samples.
+    public static func samples(fromFile url: URL) throws -> [Float] {
+        try AudioConverter().resampleAudioFile(url)
     }
 
     private func manager(

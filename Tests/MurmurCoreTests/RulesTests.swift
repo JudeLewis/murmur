@@ -42,6 +42,9 @@ struct RulesTests {
         let emDash = "\u{2014}"
         let files = Self.files(in: "Sources", ending: ".swift")
             + Self.files(in: "Tests", ending: ".swift")
+            + Self.files(in: "iPhone/App", ending: ".swift")
+            + Self.files(in: "iPhone/Keyboard", ending: ".swift")
+            + Self.files(in: "iPhone/Shared", ending: ".swift")
             + Self.files(in: "docs", ending: ".md")
             + Self.files(in: "scripts", ending: ".sh")
             + ["CLAUDE.md", "SPEC.md", "TODO.md", "FUTURE_TEST.md"].map { Self.root.appending(path: $0) }

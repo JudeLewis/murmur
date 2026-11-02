@@ -1,6 +1,6 @@
 # Murmur: what it does
 
-Murmur is a menu bar app. It has no window; everything happens through the Fn key, a small pill at the bottom of the screen, and the menu under its icon.
+Murmur is a menu bar app. It has no window; everything happens through the Fn key, a small pill at the bottom of the screen, and the menu under its icon. On iPhone it is an app and a keyboard (section 9).
 
 ## 1. The idea
 
@@ -86,7 +86,7 @@ On by default. Turns American spellings into British ones from a fixed list (col
 
 ### 6.1 The icon
 
-A wave when ready; a filled circle with a wave while listening; three dots while writing; a down arrow while the model gets ready; a warning triangle if the model failed to load.
+The app icon (in Applications and on the iPhone) is the Murmur logo: a wave of starlings at dusk. In the menu bar: a wave when ready; a filled circle with a wave while listening; three dots while writing; a down arrow while the model gets ready; a warning triangle if the model failed to load.
 
 ### 6.2 Recent dictations
 
@@ -126,3 +126,59 @@ The first time Murmur runs from Applications, it turns on Open at Login. After t
 - The internet is used only to download the speech models.
 - Recent dictations are kept in Murmur's settings on this Mac only.
 - Murmur's log (in the Mac's system log) holds Fn timings, modifier key codes and what Murmur did, such as "Wrote 84 characters". Never the words, and never ordinary typed keys.
+- On iPhone the same holds: audio stays in memory, and the internet is only used to download the model. The last dictation's text waits in the app and keyboard's shared folder until the next one, so the keyboard can type it. Recent dictations and the word list stay in the app on the phone.
+
+## 9. On iPhone
+
+Two parts: the Murmur app, which listens and writes, and the Murmur keyboard, which types the text into any app. iOS doesn't let a keyboard use the microphone, so the keyboard asks the app to. The speech model, tidying, British spelling and word list rules are the same as on the Mac (3, 4.1 to 4.3). Installed from the Mac with Jude's developer account, not the App Store.
+
+### 9.1 The Murmur app
+
+- One screen, from the top:
+  - A status line: "Getting the speech model ready (42%). After an update this takes a few minutes. Keep Murmur open until it says Ready.", "Ready", or "Keyboard on. Turns off 10 minutes after your last dictation." with a "Turn off now" button.
+  - A big Talk button: tap to start, tap to stop. The text shows underneath and is copied, ready to paste anywhere. If no keyboard session was on, the microphone goes off again once the text is written.
+  - Recent: the last 10 dictations. Tap one to copy it.
+  - Tidy speech (drops um and er) and British spelling, both on to start with.
+  - Word list: the same rules as 4.2, edited in a text box in the app. Changes work from the next dictation.
+  - Setting up the keyboard: the steps in 9.5, with a button that opens Murmur's page in Settings.
+- The first time it opens, the speech model downloads (about 400 MB, best on Wi-Fi), then gets ready for the iPhone's chip. That takes a few minutes, and again after every update, because iOS throws away the prepared copy when the app is reinstalled. It only finishes while the app is open, so keep it on screen until it says Ready. After that it is ready in under a second each time the app opens.
+
+### 9.2 The Murmur keyboard
+
+- Switch to it with 🌐 in any app. Tap 🌐 again to go back to Apple's keyboard to type letters.
+- From the top: a status line, a big round Talk button, then a row with space, delete (hold to repeat) and return. A 🌐 key is added on iPhones that don't show their own below the keyboard.
+- What it says:
+  - No session: "Tap to turn Murmur on".
+  - Ready: "Tap to talk". While the model is still getting ready: "The speech model is getting ready. Open Murmur and keep it on screen until it says Ready." Talking still works; the text comes once the model is ready.
+  - Listening: a red Stop button, "Listening. Tap to stop.", and ✕ to throw the recording away.
+  - Writing: a spinner and "Writing", or "Writing once the speech model is ready. Open Murmur and keep it on screen."
+  - For a few seconds after a dictation: "Didn't catch that." or what went wrong.
+  - Without Full Access: "Murmur needs Full Access: open the Murmur app and follow Setting up."
+
+### 9.3 Keyboard sessions
+
+- A session means Murmur's microphone is on, so Talk works straight from the keyboard. iOS shows the orange dot at the top of the screen while it's on.
+- Starting one: tap Talk when there's no session. The Murmur app opens, turns the microphone on and says "Murmur is on. Tap ◀ at the top left to go back." Back in your app, tap Talk.
+- Sound heard during a session is thrown away straight away, unless Talk was tapped.
+- It ends by itself 10 minutes after the last dictation, never in the middle of one. "Turn off now" in the app ends it straight away. A phone call, or anything else that takes the microphone, also ends it; a dictation in progress is written out first.
+- If the microphone stops without warning, the app starts it again within 2 seconds, or ends the session so the keyboard knows.
+- iOS can close the app in the background (more likely in Low Power Mode). The keyboard notices within 6 seconds and goes back to "Tap to turn Murmur on".
+- Music and podcasts keep playing during a session, so they can end up in a dictation.
+
+### 9.4 Talking from the keyboard
+
+- Tap Talk to start and tap again to stop; the text is typed where the cursor is. ✕ throws the recording away.
+- A space goes after the text, and before it too if it would otherwise join the word or punctuation in front. No space after an opening bracket or quote, @, # or /.
+- Only the keyboard that started a dictation types it, once. If the keyboard closes before the text is ready, the text isn't typed anywhere; it's in Recent in the app.
+- If the keyboard closes while listening, Murmur keeps listening. The next time the keyboard opens it shows Listening; tap Stop and the text is typed there.
+- A recording stops by itself after 15 minutes and is written out as usual.
+
+### 9.5 Setting up on iPhone
+
+1. Claude installs Murmur from the Mac with `./scripts/install-phone.sh`, with the iPhone plugged in or on the same Wi-Fi.
+2. Open Murmur, allow the microphone, and wait for "Ready".
+3. In the app, tap "Open Settings", then Keyboards, and turn on Murmur and Allow Full Access. Full Access lets the keyboard and app share two small files; Murmur's keyboard sends nothing online.
+
+### 9.6 The phone's trace
+
+The app and the keyboard each keep a list of their last 200 events with times ("sent start", "typed 84 characters"), never the words. It lives in their shared folder on the phone, so Claude can read it from the Mac when something goes wrong.

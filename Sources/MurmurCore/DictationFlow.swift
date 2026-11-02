@@ -1,5 +1,5 @@
 /// Where a dictation is: waiting, listening, or turning speech into text.
-public enum DictationPhase: Equatable, Sendable {
+public enum DictationPhase: String, Codable, Equatable, Sendable {
     case idle
     case recording
     case transcribing
@@ -48,6 +48,16 @@ public struct DictationFlow: Sendable {
         guard phase == .idle else { return false }
         phase = .transcribing
         return true
+    }
+
+    /// A request from the iPhone keyboard. Start and stop are separate, not a
+    /// toggle, so a keyboard showing an old state can't stop what it meant to start.
+    public mutating func handle(_ request: KeyboardRequestKind) -> DictationAction {
+        switch (request, phase) {
+        case (.start, .idle), (.stop, .recording): toggle()
+        case (.cancel, _): cancel()
+        default: .nothing
+        }
     }
 
     /// The text was pasted, or nothing was heard, or something failed.

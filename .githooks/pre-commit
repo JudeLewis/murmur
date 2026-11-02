@@ -1,6 +1,13 @@
 #!/bin/sh
-# Runs before every commit: the app must build and the tests must pass.
+# Runs before every commit: the apps must build and the tests must pass.
 # Turned on once per clone with: git config core.hooksPath .githooks
 set -e
 swift build
 swift test
+
+# The iPhone app and keyboard, only when something they use has changed.
+if git diff --cached --name-only | grep -qE '^(iPhone/|Sources/MurmurCore/|Sources/MurmurSpeech/|Package)'; then
+  xcodebuild -project iPhone/Murmur.xcodeproj -scheme MurmurPhone -configuration Release \
+    -destination 'generic/platform=iOS' -derivedDataPath iPhone/build/Check \
+    CODE_SIGNING_ALLOWED=NO -quiet build
+fi

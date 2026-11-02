@@ -1,5 +1,6 @@
 import AppKit
 import MurmurCore
+import MurmurSpeech
 import ServiceManagement
 
 /// Runs Murmur: the menu bar icon, the Fn double tap, and each dictation from

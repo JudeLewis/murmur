@@ -4,15 +4,17 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en-GB</string>
+	<key>CFBundleDisplayName</key>
+	<string>Murmur</string>
 	<key>CFBundleExecutable</key>
 	<string>Murmur</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.judelewis.murmur</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Murmur</string>
-	<key>CFBundleDisplayName</key>
 	<string>Murmur</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
@@ -24,9 +26,9 @@
 	<string>15.0</string>
 	<key>LSUIElement</key>
 	<true/>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Murmur listens only while you dictate, and turns your speech into text on this Mac.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Murmur listens only while you dictate, and turns your speech into text on this Mac.</string>
 </dict>
 </plist>

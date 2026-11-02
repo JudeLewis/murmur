@@ -29,6 +29,15 @@ public enum Tidy {
     public static func forInsertion(_ text: String) -> String {
         text.isEmpty ? "" : text + " "
     }
+
+    /// On iPhone the keyboard can see the text before the cursor, so it also
+    /// adds a space in front when the dictation would otherwise join the word
+    /// or punctuation there. Not after an opening bracket, quote, @, # or /.
+    public static func forInsertion(_ text: String, after before: String?) -> String {
+        guard !text.isEmpty else { return "" }
+        let joins = before?.last.map { $0.isLetter || $0.isNumber || ".,!?;:%)]}\u{201D}\u{2019}\u{2026}".contains($0) } ?? false
+        return (joins ? " " : "") + forInsertion(text)
+    }
 }
 
 /// The last few dictations, newest first, so a missed paste is never lost.

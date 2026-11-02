@@ -1,6 +1,6 @@
 import AppKit
-import FluidAudio
 import MurmurCore
+import MurmurSpeech
 
 // Test mode, for checking the model without speaking:
 //   Murmur --transcribe recording.wav [--exact]
@@ -11,7 +11,7 @@ if let index = CommandLine.arguments.firstIndex(of: "--transcribe"), index + 1 <
     Task {
         do {
             Settings.registerDefaults()
-            let samples = try AudioConverter().resampleAudioFile(url)
+            let samples = try Transcriber.samples(fromFile: url)
             let raw = try await Transcriber().transcribe(samples, sampleRate: 16_000, model: model)
             print(Tidy.finish(raw, words: Settings.words(), british: Settings.british))
             exit(0)
