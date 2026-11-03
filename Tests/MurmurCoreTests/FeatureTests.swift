@@ -204,9 +204,11 @@ struct HoldFnTests {
         var watcher = FnWatcher()
         _ = watcher.handle(fn(true), at: 10)
         _ = watcher.handle(fn(false), at: 10.1)
-        #expect(watcher.tick(at: 10.6) == .nothing)
-        _ = watcher.handle(fn(true), at: 10.3)
-        #expect(watcher.handle(fn(false), at: 10.4) == .doubleTap)
+        #expect(watcher.tick(at: 10.3) == .nothing)
+        _ = watcher.handle(fn(true), at: 10.35)
+        #expect(watcher.tick(at: 10.4) == .nothing)
+        #expect(watcher.handle(fn(false), at: 10.45) == .doubleTap)
+        #expect(watcher.tick(at: 10.9) == .nothing)
     }
 
     @Test func canBeTurnedOff() {

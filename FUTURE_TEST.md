@@ -12,5 +12,7 @@
 - **Reading the selected text (Mac)**: depends on each app's Accessibility support. Apps that don't answer get Command-C; a code editor that copies the whole line when nothing is selected could have that line rewritten.
 - **Apple Intelligence on iPhone**: needs a real iPhone 16. How often iOS refuses the app while it's in the background ("busy") is only known from Jude's use; the trace notes each answer and whether the app was on screen. Which apps share the selected text with a keyboard is also only known by trying them.
 - **Type as I speak (Mac)**: typing into real apps needs Accessibility and a screen. Which words settle, and what's deleted and typed, is tested (2.9); `Murmur --live recording` checks it with the real model. Untested: apps that handle typed key presses oddly, and whether a held Fn changes Murmur's own key presses.
+- **Other people's voices (Mac)**: tested with the Mac's voices mixed at set loudness (4.10); a real person across a real room, with echo, only Jude can try. The rule itself is tested with made-up loudness.
+- **Webmail window titles (Mac)**: the browsers' title formats were checked against what they're known to show, not on Jude's Mac for each browser.
 - **A chosen microphone at a different rate (Mac)**: Jude's Mac has only 48 kHz microphones, so a 24 kHz one (AirPods) taking its own format in the tap hasn't been tried.
 - **Choosing the microphone and the lid (Mac)**: need real devices. The choice rules are tested (3.3).

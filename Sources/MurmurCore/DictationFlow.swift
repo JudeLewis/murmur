@@ -19,6 +19,8 @@ public struct DictationFlow: Sendable {
     public private(set) var phase: DictationPhase = .idle
     /// This dictation was started by holding Fn, so letting go finishes it.
     public private(set) var heldOpen = false
+    /// Paused by a single tap of Fn: what's said meanwhile isn't kept (SPEC.md 2.10).
+    public private(set) var paused = false
 
     public init() {}
 
@@ -30,6 +32,7 @@ public struct DictationFlow: Sendable {
             return .startRecording
         case .recording:
             phase = .transcribing
+            paused = false
             return .stopAndTranscribe
         case .transcribing:
             // Text from the last recording is still on its way; ignore until it lands.
@@ -60,6 +63,7 @@ public struct DictationFlow: Sendable {
     /// Escape while listening throws the recording away.
     public mutating func cancel() -> DictationAction {
         heldOpen = false
+        paused = false
         guard phase == .recording else { return .nothing }
         phase = .idle
         return .cancelRecording
@@ -83,9 +87,18 @@ public struct DictationFlow: Sendable {
         }
     }
 
+    /// A single tap of Fn: pauses or carries on, only while listening after a
+    /// double tap (a hold is let go instead). Returns whether it did.
+    public mutating func singleTap() -> Bool {
+        guard phase == .recording, !heldOpen else { return false }
+        paused.toggle()
+        return true
+    }
+
     /// The text was pasted, or nothing was heard, or something failed.
     public mutating func finished() {
         phase = .idle
         heldOpen = false
+        paused = false
     }
 }

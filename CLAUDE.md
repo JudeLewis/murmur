@@ -51,6 +51,7 @@ Sources/MurmurCore/        Plain logic, no AppKit or audio; all of it tested
   Ducking.swift            Turning music down while listening (Mac)
   OnDeviceAIPrompts.swift  Command Mode and self-correction prompts and checks; Whisper mode; ⌃⌘V; microphone choice
   LiveTyping.swift         Type as I speak: which words have settled, and what to delete and type
+  Context.swift            Emails laid out as emails, "scratch that", and quieter voices left out
   PhoneLink.swift          iPhone: what the keyboard shows, sends and types; the 10 minute session
   LinkStore.swift          iPhone: the files the app and keyboard share, and their trace
 Sources/MurmurSpeech/      Shared by Mac and iPhone: needs FluidAudio, the microphone or Apple Intelligence

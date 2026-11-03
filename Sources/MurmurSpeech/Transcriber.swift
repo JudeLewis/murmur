@@ -19,16 +19,25 @@ public actor Transcriber {
 
     /// Samples are mono at `sampleRate`; they are resampled to the 16 kHz the model needs.
     public func transcribe(_ samples: [Float], sampleRate: Double, model: SpeechModel) async throws -> String {
-        try await result(samples, sampleRate: sampleRate, model: model).text
+        try await result(samples, sampleRate: sampleRate, model: model).0.text
     }
 
     /// For Type as I speak: each word heard, with when it was said (seconds from the start of `samples`).
     public func words(_ samples: [Float], sampleRate: Double, model: SpeechModel) async throws -> [HeardWord] {
-        let timings = try await result(samples, sampleRate: sampleRate, model: model).tokenTimings ?? []
-        return buildWordTimings(from: timings).map { HeardWord($0.word, start: $0.startTime, end: $0.endTime) }
+        try await heard(samples, sampleRate: sampleRate, model: model).words
     }
 
-    private func result(_ samples: [Float], sampleRate: Double, model: SpeechModel) async throws -> ASRResult {
+    /// The text, and each word with when and how loud it was said.
+    public func heard(_ samples: [Float], sampleRate: Double, model: SpeechModel) async throws -> (text: String, words: [HeardWord]) {
+        let (result, audio) = try await self.result(samples, sampleRate: sampleRate, model: model)
+        let words = buildWordTimings(from: result.tokenTimings ?? []).map { word in
+            HeardWord(word.word, start: word.startTime, end: word.endTime,
+                      loudness: Self.loudness(of: audio, from: word.startTime, to: word.endTime))
+        }
+        return (result.text, words)
+    }
+
+    private func result(_ samples: [Float], sampleRate: Double, model: SpeechModel) async throws -> (ASRResult, [Float]) {
         let manager = try await manager(for: model)
         var audio = try AudioConverter().resample(samples, from: sampleRate)
 
@@ -36,7 +45,24 @@ public actor Transcriber {
         if audio.count < 16_000 { audio += [Float](repeating: 0, count: 16_000 - audio.count) }
 
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-        return try await manager.transcribe(audio, decoderState: &state)
+        return (try await manager.transcribe(audio, decoderState: &state), audio)
+    }
+
+    /// How loud a word was: its loudest 30 ms. A word's timing runs on to the
+    /// next word, pauses included, so an average would make short words before
+    /// a pause seem quiet (it left out "Scratch that." on 3 Nov 2026).
+    private static func loudness(of audio: [Float], from start: Double, to end: Double) -> Float {
+        let first = max(0, min(audio.count, Int(start * 16_000)))
+        let last = max(first, min(audio.count, Int(min(end, start + 0.6) * 16_000)))
+        var loudest: Float = 0
+        var frame = first
+        while frame < last {
+            let stop = min(last, frame + 480)
+            let sum = audio[frame..<stop].reduce(Float(0)) { $0 + $1 * $1 }
+            loudest = max(loudest, (sum / Float(stop - frame)).squareRoot())
+            frame = stop
+        }
+        return loudest
     }
 
     /// For test mode: reads a sound file as mono 16 kHz samples.

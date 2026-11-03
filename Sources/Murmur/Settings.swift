@@ -17,6 +17,8 @@ enum Settings {
             "commandMode": true,
             "fixCorrections": true,
             "typeAsISpeak": true,
+            "layOutEmails": true,
+            "ignoreQuieterVoices": true,
             "whisperMode": false,
             // Messages and WhatsApp start in casual style (SPEC.md 4.7).
             "casualApps": ["com.apple.MobileSMS", "net.whatsapp.WhatsApp"],
@@ -58,6 +60,18 @@ enum Settings {
     static var typeAsISpeak: Bool {
         get { defaults.bool(forKey: "typeAsISpeak") }
         set { defaults.set(newValue, forKey: "typeAsISpeak") }
+    }
+
+    /// Greeting and sign-off on their own lines in emails (SPEC.md 4.9).
+    static var layOutEmails: Bool {
+        get { defaults.bool(forKey: "layOutEmails") }
+        set { defaults.set(newValue, forKey: "layOutEmails") }
+    }
+
+    /// Leave out sentences much quieter than your own voice (SPEC.md 4.10).
+    static var ignoreQuieterVoices: Bool {
+        get { defaults.bool(forKey: "ignoreQuieterVoices") }
+        set { defaults.set(newValue, forKey: "ignoreQuieterVoices") }
     }
 
     /// Boost quiet recordings (SPEC.md 3.4).

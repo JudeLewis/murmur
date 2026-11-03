@@ -23,6 +23,8 @@ public struct FnWatcher: Sendable {
         case holdEnded
         /// Another key was pressed during a hold (Fn+arrow): throw it away.
         case holdCancelled
+        /// One tap of Fn and no second one: pause or carry on (SPEC.md 2.10).
+        case singleTap
     }
 
     /// How long Fn must be held on its own before a hold starts listening.
@@ -51,8 +53,13 @@ public struct FnWatcher: Sendable {
         self.detector = detector
     }
 
-    /// The app calls this `holdDelay` after Fn goes down, as nothing else would.
+    /// The app calls this `holdDelay` after Fn goes down, and just over the
+    /// double tap gap after it comes up, as nothing else would.
+    /// How long after a tap a second one can still make a double tap.
+    public var tapGap: TimeInterval { detector.maxGap }
+
     public mutating func tick(at time: TimeInterval) -> Outcome {
+        if !fnIsDown, detector.singleTap(at: time) { return .singleTap }
         guard fnIsDown, !spoiled, !holding, let pressedAt, time - pressedAt >= Self.holdDelay else {
             return .nothing
         }
@@ -78,12 +85,15 @@ public struct FnWatcher: Sendable {
         switch event {
         case .modifiersChanged(let keyCode, let fnHeld, let controlHeld) where Self.fnKeyCodes.contains(keyCode):
             if fnHeld, !fnIsDown {
+                // A lone tap whose check hadn't come yet still counts, before this press.
+                let lone = detector.singleTap(at: time)
                 fnIsDown = true
                 pressedAt = time
                 spoiled = false
                 withControl = controlHeld
                 detector.keyDown(at: time)
                 if controlHeld { detector.otherKey() }
+                if lone { return .singleTap }
             } else if !fnHeld, fnIsDown {
                 fnIsDown = false
                 pressedAt = nil

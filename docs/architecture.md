@@ -149,3 +149,13 @@ Jude asked for the words to appear while talking, not at the end, and picked "ty
 - **Typed with key presses (unicode key events), not the clipboard**, whole characters at a time. Line breaks are pasted, since a typed Return sends messages; the clipboard is put back once at the end, so two pastes close together can't lose it.
 - **While Fn is held, deleting waits**: Fn and Delete is forward delete.
 - **No "no wait" fix while it's on**: the words are already typed. Command Mode still answers at the end.
+
+## Knowing what you're writing (added 3 Nov 2026)
+
+Jude asked for emails to be laid out as emails, for commands mid-dictation like "no wait", and for Murmur to ignore talk to someone in the room.
+
+- **Emails by fixed rules, not AI** (EmailLayout): only line breaks and the punctuation beside them change, so it's instant, can't reword anything, and works with Type as I speak. Mail apps are known by bundle id; webmail by any part of a browser window's title, read off the main thread.
+- **"Scratch that" by rule** (ScratchThat), punctuated or not: unpunctuated, it needs the next words to restart the sentence, which tells "send it to tom no scratch that send it to sarah" from "scratch that itch".
+- **Side chat: a pause and a loudness check, not AI.** A single Fn tap pauses (the recorder stops keeping audio, so neither path sees it). QuietVoices leaves out sentences under 0.3 of the loudness of your loudest words. Apple Intelligence deciding what was side chat was tested on 10 dictations, twice each: 11 of 20 right, and it changed real text in 3 of 10 clean ones, so it wasn't built.
+- **Word timings run on to the next word** (FluidAudio sets each token's end at the next one's start), so a word's loudness is its loudest 30 ms and a pause is measured start to start.
+- **A single tap is only known once the double-tap gap has passed**, so FnKeyMonitor checks back after it; a lone tap whose check hasn't come yet is reported when Fn is next pressed, and a tap straight after a double tap doesn't count.

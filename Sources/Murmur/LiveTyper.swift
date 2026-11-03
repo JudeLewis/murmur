@@ -11,8 +11,8 @@ final class LiveTyper {
     private let transcriber: Transcriber
     private let model: SpeechModel
     private let whisper: Bool
-    /// The settled words as they should look: tidying, spelling, the word list and so on.
-    private let shape: (String) -> Dictation
+    /// The settled words as they should look: other voices left out, tidying, spelling and so on.
+    private let shape: ([HeardWord]) -> Dictation
     private var live = LiveTranscript()
     private var loop: Task<Void, Never>?
     /// What Murmur has typed so far in this dictation.
@@ -26,7 +26,7 @@ final class LiveTyper {
     /// What was on the clipboard before the first line break was pasted, put back once at the end.
     private var clipboard: (saved: [NSPasteboardItem], ourChange: Int)?
 
-    init(recorder: Recorder, transcriber: Transcriber, model: SpeechModel, whisper: Bool, shape: @escaping (String) -> Dictation) {
+    init(recorder: Recorder, transcriber: Transcriber, model: SpeechModel, whisper: Bool, shape: @escaping ([HeardWord]) -> Dictation) {
         self.recorder = recorder
         self.transcriber = transcriber
         self.model = model
@@ -71,7 +71,7 @@ final class LiveTyper {
             lostTheEnd = true
             log.error("Type as I speak couldn't read the last words")
         }
-        let dictation = shape(live.text)
+        let dictation = shape(live.settledWords)
         await show(Tidy.forInsertion(dictation.text, pressEnter: dictation.pressEnter), final: true)
         putClipboardBack()
         return dictation
@@ -81,15 +81,22 @@ final class LiveTyper {
         let start = live.windowStart
         let (samples, until) = recorder.heard(from: start)
         guard let words = await read(samples, from: start), !live.heard(words, now: until).isEmpty else { return }
-        await show(shape(live.text).text, final: false)
+        await show(shape(live.settledWords).text, final: false)
     }
 
     /// The words in `samples`, with times from the start of the recording.
     private func read(_ samples: [Float], from start: Double) async -> [HeardWord]? {
         let rate = recorder.sampleRate
-        let audio = whisper ? await Task.detached { Loudness.boosted(samples, maxGain: Loudness.whisperGain) }.value : samples
+        // Each reading gets its own Whisper boost, so loudness is put back to as heard,
+        // or other people's voices couldn't be told from yours (SPEC.md 4.10).
+        let (audio, gain) = whisper
+            ? await Task.detached { () -> ([Float], Float) in
+                let gain = Loudness.gain(for: samples, maxGain: Loudness.whisperGain)
+                return (gain == 1 ? samples : samples.map { $0 * gain }, gain)
+            }.value
+            : (samples, 1)
         guard let words = try? await transcriber.words(audio, sampleRate: rate, model: model) else { return nil }
-        return words.map { HeardWord($0.text, start: $0.start + start, end: $0.end + start) }
+        return words.map { HeardWord($0.text, start: $0.start + start, end: $0.end + start, loudness: $0.loudness.map { $0 / gain }) }
     }
 
     /// Changes what's been typed into `target`.

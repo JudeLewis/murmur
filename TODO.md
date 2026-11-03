@@ -14,3 +14,4 @@ Live work only. Finished items move to archive/.
 - [ ] Word list guides the model while it listens, not just fixes text afterwards (FluidAudio's custom vocabulary boosting; about 130 MB more to download).
 - [ ] Remove a stray comma left where a filler was dropped ("my favourite colour is, grey").
 - [ ] iPhone: Type as I speak on the keyboard too, once the Mac version has been used for a while.
+- [ ] Per-app styles like Wispr's (emails formal, chats casual, notes as said), building on the email layout.

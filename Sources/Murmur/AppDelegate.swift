@@ -42,6 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var commandMode = false
     /// Type as I speak (SPEC.md 2.9), while it's typing this dictation.
     private var liveTyper: LiveTyper?
+    /// This dictation is going into an email (SPEC.md 4.9).
+    private var dictatingEmail = false
     private var lastPasteAgain = Date.distantPast
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -58,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         keys.onHoldStarted = { [weak self] in self?.holdStarted() }
         keys.onHoldEnded = { [weak self] in self?.holdEnded() }
         keys.onHoldCancelled = { [weak self] in self?.holdCancelled() }
+        keys.onSingleTap = { [weak self] in self?.singleTap() }
         keys.onCommandHoldStarted = { [weak self] in self?.commandHoldStarted() }
         keys.onPasteAgain = { [weak self] in self?.pasteAgain() }
         keys.holdToTalk = Settings.holdToTalk
@@ -141,6 +144,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func cancel() { perform(flow.cancel()) }
 
+    /// A single tap of Fn while listening: pause, or carry on (SPEC.md 2.10).
+    private func singleTap() {
+        guard let recorder, flow.singleTap() else { return }
+        recorder.paused = flow.paused
+        log.notice("\(self.flow.paused ? "Paused" : "Carrying on", privacy: .public)")
+        pill.show(flow.paused ? .message("Paused. Tap Fn to carry on.") : .listening)
+        updateIcon()
+    }
+
     private func cancelled() {
         commandMode = false
         stopWatching()
@@ -191,7 +203,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             pill.flash("Couldn't start the microphone.", seconds: 4)
             return
         }
-        dictatingInto = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let front = NSWorkspace.shared.frontmostApplication
+        dictatingInto = front?.bundleIdentifier
+        spotEmail(in: front)
         playSound("Tink")
         pill.show(.listening)
         // After the Tink, so it isn't turned down too.
@@ -203,7 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         levelTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, let recorder = self.recorder else { return }
+                guard let self, let recorder = self.recorder, !self.flow.paused else { return }
                 self.pill.push(level: recorder.level)
             }
         }
@@ -215,16 +229,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         startTypingLive()
     }
 
+    /// Emails (SPEC.md 4.9): a mail app is known straight away; for a browser the
+    /// window title says whether it's Gmail or Outlook, read in the background.
+    private func spotEmail(in app: NSRunningApplication?) {
+        let bundleID = app?.bundleIdentifier
+        dictatingEmail = Settings.layOutEmails && !commandMode && EmailLayout.isEmail(app: bundleID, windowTitle: nil)
+        guard Settings.layOutEmails, !commandMode, let app, let bundleID, EmailLayout.browsers.contains(bundleID) else { return }
+        let pid = app.processIdentifier
+        Task { [weak self] in
+            let title = await Task.detached { Selection.windowTitle(of: pid) }.value
+            guard let self, self.flow.phase == .recording, self.dictatingInto == bundleID else { return }
+            self.dictatingEmail = EmailLayout.isEmail(app: bundleID, windowTitle: title)
+            if self.dictatingEmail { log.notice("Writing an email") }
+        }
+    }
+
     /// Type as I speak (SPEC.md 2.9): not for Command Mode, and only once the
     /// model is ready and Murmur may press keys; otherwise it's pasted at the end.
     private func startTypingLive() {
         guard Settings.typeAsISpeak, !commandMode, loading == .ready, AXIsProcessTrusted(), let recorder else { return }
         let casual = dictatingInto.map(Settings.casualApps.contains) ?? false
+        let quiet = Settings.ignoreQuieterVoices
         let words = Settings.words()
         let snippets = Settings.snippets
         let british = Settings.british
+        // Whether it's an email may only be known a moment after listening starts.
         liveTyper = LiveTyper(recorder: recorder, transcriber: transcriber, model: Settings.model, whisper: Settings.whisperMode) {
-            Tidy.dictation($0, words: words, snippets: snippets, british: british, casual: casual)
+            [weak self] heard in
+            let kept = quiet ? QuietVoices.keep(heard) : heard
+            return Tidy.dictation(
+                kept.map(\.text).joined(separator: " "), words: words, snippets: snippets, british: british, casual: casual,
+                email: self?.dictatingEmail ?? false)
         }
         liveTyper?.start()
     }
@@ -285,11 +320,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pill.show(.working(loading == .ready ? (command ? "Thinking" : "Writing") : "Getting the speech model ready"))
         let model = Settings.model
         let whisper = Settings.whisperMode
+        let quiet = Settings.ignoreQuieterVoices && !command
         Task {
             do {
                 // Off the main thread: a long recording is millions of samples.
                 let audio = whisper ? await Task.detached { Loudness.boosted(samples, maxGain: Loudness.whisperGain) }.value : samples
-                let raw = try await transcriber.transcribe(audio, sampleRate: sampleRate, model: model)
+                let raw: String
+                if quiet {
+                    // Other people's voices left out (SPEC.md 4.10).
+                    let heard = try await transcriber.heard(audio, sampleRate: sampleRate, model: model)
+                    let kept = QuietVoices.keep(heard.words)
+                    raw = kept.count == heard.words.count ? heard.text : kept.map(\.text).joined(separator: " ")
+                    if kept.count < heard.words.count { log.notice("Left out \(heard.words.count - kept.count) quieter words") }
+                } else {
+                    raw = try await transcriber.transcribe(audio, sampleRate: sampleRate, model: model)
+                }
                 unsent = nil
                 if Settings.model == model { loading = .ready }
                 if command {
@@ -371,7 +416,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let fixOn = Settings.fixCorrections
         let triggers = snippets.map(\.trigger)
         // "Monday, no wait, I mean Tuesday": the on-device AI may only take words out (SPEC.md 4.8).
-        let dictation = await Tidy.dictation(raw, words: words, snippets: snippets, british: Settings.british, casual: casual) { finished in
+        let dictation = await Tidy.dictation(
+            raw, words: words, snippets: snippets, british: Settings.british, casual: casual, email: dictatingEmail
+        ) { finished in
             guard fixOn, let fixed = try? await OnDeviceAI.fixSelfCorrection(in: finished, keeping: triggers) else { return nil }
             log.notice("Fixed a self-correction")
             return fixed
@@ -472,6 +519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateIcon() {
         let symbol: String
         switch (flow.phase, loading) {
+        case (.recording, _) where flow.paused: symbol = "pause.circle"
         case (.recording, _): symbol = "waveform.circle.fill"
         case (.transcribing, _): symbol = "ellipsis.circle"
         case (.idle, .loading): symbol = "arrow.down.circle"
@@ -486,6 +534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusLine: String {
         switch (flow.phase, loading) {
         case (.recording, _) where flow.heldOpen: "Listening. Let go of Fn to finish, Esc to cancel."
+        case (.recording, _) where flow.paused: "Paused. Tap Fn to carry on, double-tap to finish."
         case (.recording, _): "Listening. Double-tap Fn to finish, Esc to cancel."
         case (.transcribing, _): "Writing…"
         case (.idle, .loading(let fraction)) where fraction > 0 && fraction < 1:
@@ -587,6 +636,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func settingsMenu() -> NSMenuItem {
         let submenu = NSMenu()
         submenu.addItem(item("Type as I speak", #selector(toggleTypeAsISpeak), on: Settings.typeAsISpeak))
+        submenu.addItem(item("Lay out emails", #selector(toggleLayOutEmails), on: Settings.layOutEmails))
+        submenu.addItem(item("Ignore quieter voices (people nearby)", #selector(toggleIgnoreQuieterVoices), on: Settings.ignoreQuieterVoices))
         submenu.addItem(item("Tidy speech (drops um and er)", #selector(toggleTidy), on: Settings.model == .tidy))
         submenu.addItem(item("British spelling", #selector(toggleBritish), on: Settings.british))
         submenu.addItem(item("Fix \u{201C}no wait, I mean\u{201D} (Apple Intelligence)", #selector(toggleFixCorrections), on: Settings.fixCorrections))
@@ -673,6 +724,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleWhisperMode() { Settings.whisperMode.toggle() }
     @objc private func toggleTypeAsISpeak() { Settings.typeAsISpeak.toggle() }
+    @objc private func toggleLayOutEmails() { Settings.layOutEmails.toggle() }
+    @objc private func toggleIgnoreQuieterVoices() { Settings.ignoreQuieterVoices.toggle() }
 
     @objc private func toggleCommandMode() {
         Settings.commandMode.toggle()

@@ -15,6 +15,21 @@ enum Selection {
         return await byCopying()
     }
 
+    /// The title of an app's window, for spotting webmail (SPEC.md 4.9). Off the
+    /// main thread, as a busy browser can take a while to answer.
+    nonisolated static func windowTitle(of pid: pid_t) -> String? {
+        let element = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(element, 0.25)
+        var window: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &window) == .success,
+              let window, CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
+        var title: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window as! AXUIElement, kAXTitleAttribute as CFString, &title) == .success else {
+            return nil
+        }
+        return title as? String
+    }
+
     private static func fromAccessibility() -> String? {
         let system = AXUIElementCreateSystemWide()
         // A busy app mustn't hold up the keyboard for seconds (the key watch shares this thread).

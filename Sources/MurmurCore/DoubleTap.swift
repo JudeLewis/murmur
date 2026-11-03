@@ -13,6 +13,8 @@ public struct DoubleTapDetector: Sendable {
     private var pressedAt: TimeInterval?
     private var interrupted = false
     private var lastTapEndedAt: TimeInterval?
+    private var lastTapPressedAt: TimeInterval?
+    private var doubleTapEndedAt: TimeInterval?
 
     public init(maxHold: TimeInterval = 0.35, maxGap: TimeInterval = 0.4) {
         self.maxHold = maxHold
@@ -35,10 +37,22 @@ public struct DoubleTapDetector: Sendable {
         }
         if let last = lastTapEndedAt, pressed - last <= maxGap {
             lastTapEndedAt = nil
+            doubleTapEndedAt = time
             return true
         }
         lastTapEndedAt = time
+        lastTapPressedAt = pressed
         return false
+    }
+
+    /// A lone tap: one that ended over `maxGap` ago with no second press since.
+    /// Reported once (SPEC.md 2.10: a single tap pauses).
+    /// A tap straight after a double tap (a bounce, a third tap) isn't one.
+    public mutating func singleTap(at time: TimeInterval) -> Bool {
+        guard let last = lastTapEndedAt, time - last > maxGap else { return false }
+        lastTapEndedAt = nil
+        if let double = doubleTapEndedAt, let pressed = lastTapPressedAt, pressed - double <= maxGap { return false }
+        return true
     }
 
     /// Any other key or modifier spoils a tap in progress and the gap between taps,

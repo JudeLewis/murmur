@@ -67,12 +67,15 @@ public struct Dictation: Equatable, Sendable {
 
 extension Tidy {
     /// Everything between the model and the cursor, in order: tidying, British
-    /// spelling and the word list (`finish`), then "press enter", line breaks,
-    /// casual style, and last of all snippets, so their saved text is never changed.
+    /// spelling and the word list (`finish`), then "press enter", "scratch that",
+    /// line breaks, the email layout, casual style, and last of all snippets, so
+    /// their saved text is never changed.
     public static func dictation(
-        _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false
+        _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false, email: Bool = false
     ) -> Dictation {
-        dictation(finished: finish(raw, words: words, british: british), words: words, snippets: snippets, british: british, casual: casual)
+        dictation(
+            finished: finish(raw, words: words, british: british), words: words, snippets: snippets,
+            british: british, casual: casual, email: email)
     }
 
     /// The same, with the "no wait, I mean" fix (SPEC.md 4.8) after British
@@ -80,19 +83,21 @@ extension Tidy {
     /// on-device AI and returns the fixed text, or nil to keep it as it is.
     public static func dictation(
         _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
-        fix: @Sendable (String) async -> String?
+        email: Bool = false, fix: @Sendable (String) async -> String?
     ) async -> Dictation {
         var finished = finish(raw, words: words, british: british)
         if let fixed = await fix(finished) { finished = fixed }
-        return dictation(finished: finished, words: words, snippets: snippets, british: british, casual: casual)
+        return dictation(finished: finished, words: words, snippets: snippets, british: british, casual: casual, email: email)
     }
 
     /// The same, for text that has already been through `finish`.
     public static func dictation(
-        finished: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false
+        finished: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
+        email: Bool = false
     ) -> Dictation {
         let (text, pressEnter) = SpokenCommands.pressEnter(in: finished)
-        var result = SpokenCommands.lineBreaks(in: text)
+        var result = SpokenCommands.lineBreaks(in: ScratchThat.apply(text))
+        if email { result = EmailLayout.apply(result) }
         if casual { result = Tidy.casual(result, keeping: words) }
         // Triggers get the same spelling changes as the text, so "my favorite color" still matches.
         let matching = snippets.map { snippet in

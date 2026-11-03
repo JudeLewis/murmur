@@ -78,6 +78,14 @@ A recording stops by itself after 15 minutes and is written out as usual.
 - If the last reading fails twice, the pill says "Couldn't write the last few words."
 - Needs the speech model ready and Accessibility; otherwise the dictation is pasted at the end as before. Words go wherever the cursor is, so don't click elsewhere while talking.
 
+### 2.10 Pause
+
+- While listening after a double tap, a single tap of Fn pauses: the pill says "Paused. Tap Fn to carry on." Nothing said while paused is kept, not even for the model to hear, so you can talk to someone in the room. Another single tap carries on.
+- A tap counts as single once the double-tap gap (0.4 seconds) has passed without a second tap, so a pause takes just under half a second to show. A double tap still stops, paused or not.
+- A tap straight after the double tap that started listening (a bounce, a third tap) doesn't pause.
+- While paused, the menu bar icon is a pause sign and the menu says "Paused. Tap Fn to carry on, double-tap to finish."
+- Not during Hold Fn to talk (just let go) or Command Mode. Escape still throws the recording away.
+
 ## 3. Speech to text
 
 ### 3.1 The models
@@ -148,6 +156,7 @@ On by default. Turns American spellings into British ones from a fixed list (col
 - Only at the edge of a phrase: with punctuation, or the start or end of the dictation, on one side ("Hello. New line. How are you?"). "A new line of shoes" is written as said. Pausing slightly before and after the command helps the model add that punctuation.
 - "Press enter" (or "press return") at the very end of a dictation is not written: Murmur presses Return after the text, to send a message. Said on its own, it just presses Return. On iPhone it types a Return, which sends in apps where Return sends.
 - Only the whole words count: "new lines" or "press enter to continue" are written as said.
+- "Scratch that" takes out the sentence before it (back to the last full stop, question mark or line break): "Let's meet at three. Scratch that. Let's meet at four." becomes "Let's meet at four." It must stand on its own between punctuation, so "I need to scratch that itch" is written as said. The model sometimes writes a correction with no punctuation at all; then it counts only if the words after it start the sentence again ("Send it to tom no scratch that send it to Sarah" becomes "Send it to Sarah"). Pause briefly before and after it: said straight on, the model sometimes leaves the words out altogether (seen 3 Nov 2026), and nothing happens. With Type as I speak the sentence disappears from the screen. Within one dictation only.
 
 ### 4.7 Casual style
 
@@ -165,6 +174,28 @@ On by default. Turns American spellings into British ones from a fixed list (col
 - It gets 3 seconds; if the AI is slower, what you said is kept.
 - It happens after British spelling and the word list, and before line breaks, casual style and snippets.
 - Not while "Type as I speak" is on (2.9).
+
+### 4.9 Emails
+
+- "Lay out emails" in Settings, ticked to start with. Mac only.
+- In a mail app (Mail, Outlook, Spark, Superhuman, Airmail, MailMate, Mimestream, Proton Mail) or a browser showing Gmail, Outlook, Proton Mail, Yahoo Mail, iCloud Mail or Fastmail (from the window's title), the greeting and the sign-off get their own lines:
+  "Hi Sam. Thanks for the report. Best, Jude." becomes "Hi Sam,", a blank line, "Thanks for the report.", a blank line, "Best," and "Jude" on the line below.
+- The greeting: at the very start, "Hi", "Hello", "Hey", "Dear", "Good morning" and so on, then up to three names (or "everyone", "all", "team"), then a comma and a blank line. A greeting on its own leaves the cursor ready for the message.
+- The sign-off: the last sentence, "Thanks", "Cheers", "Best", "Kind regards" and so on, with a name after it; "Kind regards", "Best wishes", "Regards", "Yours sincerely" and the like work without a name.
+- Only line breaks and the punctuation next to them change, never the words. "Thanks." at the end of a message with no name stays where it is. Say "new paragraph" between paragraphs.
+- Decided when listening starts, from the app in front then. A browser's window title is read in the background just after, as a busy browser can be slow to answer.
+- "I" is never taken for a name: "Hi, I wanted to ask" lays out as a greeting; "Hi I wanted to ask", with no comma, is left as it is.
+
+### 4.10 Other people's voices
+
+- "Ignore quieter voices (people nearby)" in Settings, ticked to start with. Mac only.
+- Someone across the room sounds much quieter than you at the Mac. A sentence about 10 decibels quieter than your own speech (under 0.3 of its loudness) is left out. A sentence ends at a full stop, question mark or exclamation mark, or a pause of over a second.
+- Your own speech is measured from the loudest words in the dictation, so a long chat across the room doesn't count as you. A dictation with only one sentence is never cut.
+- It doesn't catch what you say to someone else yourself: for that, tap Fn to pause (2.10).
+- Tested 3 Nov 2026 with a second voice in the middle of a dictation: at a third of the loudness or less it was left out (the model itself also misses much of a quiet voice); at 60% it was kept.
+- Each word's loudness is its loudest moment, so short words before a pause aren't taken for someone else. With Whisper mode on, loudness is measured as heard, before the boost.
+- Letting Apple Intelligence decide what was side chat was tried on 3 Nov 2026 and left out: on 10 made-up dictations, twice each, it removed side chat cleanly only 4 times in 10, and changed real text in 3 of the 10 without side chat.
+- With Type as I speak, a quiet sentence isn't typed; if a louder one comes later and shows an earlier sentence was someone else's, that earlier sentence is taken off the screen.
 
 ## 5. The pill
 
@@ -192,7 +223,7 @@ The last 20 dictations are kept, newest first; the menu shows 10. Clicking one c
 4. Recent (click one to copy it), Paste last dictation again (⌃⌘V), Word list and snippets…
 5. Casual style in (the app in front), with a tick
 6. Microphone (3.3)
-7. Settings: Type as I speak, Tidy speech (drops um and er), British spelling, Fix “no wait, I mean” (Apple Intelligence), Whisper mode (for speaking quietly), Hold Fn to talk, Command Mode: hold Fn and Control, Turn music down while listening, Sounds, Open at login: each with a tick
+7. Settings: Type as I speak, Lay out emails, Ignore quieter voices (people nearby), Tidy speech (drops um and er), British spelling, Fix “no wait, I mean” (Apple Intelligence), Whisper mode (for speaking quietly), Hold Fn to talk, Command Mode: hold Fn and Control, Turn music down while listening, Sounds, Open at login: each with a tick
 8. Quit Murmur
 
 ## 7. Setting up

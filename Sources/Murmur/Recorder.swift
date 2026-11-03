@@ -20,6 +20,7 @@ final class Recorder {
     private struct Captured {
         var samples: [Float] = []
         var level: Float = 0
+        var paused = false
     }
 
     private let engine = AVAudioEngine()
@@ -51,6 +52,12 @@ final class Recorder {
             input.removeTap(onBus: 0)
             throw error
         }
+    }
+
+    /// Paused (SPEC.md 2.10): what's heard meanwhile isn't kept at all.
+    var paused: Bool {
+        get { captured.withLock { $0.paused } }
+        set { captured.withLock { $0.paused = newValue; $0.level = 0 } }
     }
 
     /// Loudness of the last few milliseconds, 0 to about 1, for the pill's bars.
@@ -87,6 +94,7 @@ final class Recorder {
         { buffer, _ in
             guard let (heard, level) = MonoMix.mix(buffer) else { return }
             captured.withLock {
+                guard !$0.paused else { return }
                 $0.samples.append(contentsOf: heard)
                 $0.level = level
             }

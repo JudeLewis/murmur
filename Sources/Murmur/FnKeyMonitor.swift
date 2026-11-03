@@ -16,6 +16,7 @@ final class FnKeyMonitor {
     var onPasteAgain: () -> Void = {}
     var onHoldEnded: () -> Void = {}
     var onHoldCancelled: () -> Void = {}
+    var onSingleTap: () -> Void = {}
 
     var holdToTalk: Bool {
         get { watcher.holdToTalk }
@@ -87,10 +88,12 @@ final class FnKeyMonitor {
 
         let wasDown = watcher.fnIsDown
         react(to: watcher.handle(event, at: time))
-        if watcher.fnIsDown, !wasDown {
-            // Nothing else happens while Fn is simply held, so check back once the hold is long enough.
+        if watcher.fnIsDown != wasDown {
+            // Nothing else happens while Fn is simply held, or after a lone tap, so check
+            // back once a hold is long enough, or once a second tap can no longer come.
+            let wait = watcher.fnIsDown ? FnWatcher.holdDelay : watcher.tapGap
             Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(FnWatcher.holdDelay + 0.02))
+                try? await Task.sleep(for: .seconds(wait + 0.02))
                 guard let self else { return }
                 self.react(to: self.watcher.tick(at: ProcessInfo.processInfo.systemUptime))
             }
@@ -117,6 +120,8 @@ final class FnKeyMonitor {
         case .holdCancelled:
             log.notice("Fn hold cancelled by another key")
             onHoldCancelled()
+        case .singleTap:
+            onSingleTap()
         case .nothing:
             break
         }

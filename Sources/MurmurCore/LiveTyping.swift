@@ -9,11 +9,14 @@ public struct HeardWord: Equatable, Sendable {
     public var text: String
     public var start: Double
     public var end: Double
+    /// How loud it was said, 0 to about 1 (for leaving out quieter voices, SPEC.md 4.10).
+    public var loudness: Float?
 
-    public init(_ text: String, start: Double, end: Double) {
+    public init(_ text: String, start: Double, end: Double, loudness: Float? = nil) {
         self.text = text
         self.start = start
         self.end = end
+        self.loudness = loudness
     }
 
     var middle: Double { (start + end) / 2 }
@@ -31,7 +34,8 @@ public struct LiveTranscript: Equatable, Sendable {
     /// (its timing too), so it waits for the next reading.
     public static let cutOff: Double = 0.3
 
-    public private(set) var settled: [String] = []
+    public private(set) var settledWords: [HeardWord] = []
+    public var settled: [String] { settledWords.map(\.text) }
     /// When the settled words end.
     public private(set) var settledUntil: Double = 0
     /// The last reading's unsettled words, to compare with the next one.
@@ -94,7 +98,7 @@ public struct LiveTranscript: Equatable, Sendable {
 
     private mutating func settle(_ words: [HeardWord]) {
         guard let last = words.last else { return }
-        settled += words.map(\.text)
+        settledWords += words
         settledUntil = max(settledUntil, last.end)
     }
 }

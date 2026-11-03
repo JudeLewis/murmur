@@ -3,8 +3,9 @@ import MurmurCore
 import MurmurSpeech
 
 // Test mode, for checking the model without speaking:
-//   Murmur --transcribe recording.wav [--exact]
-// prints the text that would have been pasted, then quits.
+//   Murmur --transcribe recording.wav [--exact] [--whisper] [--email]
+// prints the text that would have been pasted (quieter voices left out, as in
+// the app's settings, and laid out as an email with --email), then quits.
 if let index = CommandLine.arguments.firstIndex(of: "--transcribe"), index + 1 < CommandLine.arguments.count {
     let url = URL(fileURLWithPath: CommandLine.arguments[index + 1])
     let model: SpeechModel = CommandLine.arguments.contains("--exact") ? .exact : .tidy
@@ -13,8 +14,15 @@ if let index = CommandLine.arguments.firstIndex(of: "--transcribe"), index + 1 <
             Settings.registerDefaults()
             var samples = try Transcriber.samples(fromFile: url)
             if CommandLine.arguments.contains("--whisper") { samples = Loudness.boosted(samples, maxGain: Loudness.whisperGain) }
-            let raw = try await Transcriber().transcribe(samples, sampleRate: 16_000, model: model)
-            print(Tidy.dictation(raw, words: Settings.words(), snippets: Settings.snippets, british: Settings.british).text)
+            let heard = try await Transcriber().heard(samples, sampleRate: 16_000, model: model)
+            let kept = Settings.ignoreQuieterVoices ? QuietVoices.keep(heard.words) : heard.words
+            let raw = kept.count == heard.words.count ? heard.text : kept.map(\.text).joined(separator: " ")
+            if kept.count < heard.words.count {
+                let left = heard.words.filter { word in !kept.contains { $0.start == word.start } }.map(\.text)
+                FileHandle.standardError.write(Data("Left out: \(left.joined(separator: " "))\n".utf8))
+            }
+            let email = CommandLine.arguments.contains("--email")
+            print(Tidy.dictation(raw, words: Settings.words(), snippets: Settings.snippets, british: Settings.british, email: email).text)
             exit(0)
         } catch {
             FileHandle.standardError.write(Data("\(error.localizedDescription)\n".utf8))

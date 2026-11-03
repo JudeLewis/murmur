@@ -163,12 +163,16 @@ public enum Loudness {
     public static let whisperGain: Float = 20
 
     public static func boosted(_ samples: [Float], maxGain: Float) -> [Float] {
+        let gain = gain(for: samples, maxGain: maxGain)
+        return gain == 1 ? samples : samples.map { $0 * gain }
+    }
+
+    /// How much `boosted` multiplies by: 1 for near-total silence (boosting it
+    /// would only make hiss) or audio that's loud enough already.
+    public static func gain(for samples: [Float], maxGain: Float) -> Float {
         let peak = samples.reduce(Float(0)) { max($0, abs($1)) }
-        // Near-total silence stays silent: boosting it would only make hiss.
-        guard peak > 0.001 else { return samples }
-        let gain = min(maxGain, 0.9 / peak)
-        guard gain > 1 else { return samples }
-        return samples.map { $0 * gain }
+        guard peak > 0.001 else { return 1 }
+        return max(1, min(maxGain, 0.9 / peak))
     }
 }
 
