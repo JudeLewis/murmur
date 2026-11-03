@@ -28,6 +28,7 @@ The project's memory: how the pieces fit, where things live, and why each choice
 | The installed app | /Applications/Murmur.app (built into build/Murmur.app first) |
 | Speech models | ~/Library/Application Support/FluidAudio/Models (about 400 MB each) |
 | Jude's word list | ~/Library/Application Support/Murmur/words.txt (edited in the Word list and snippets window) |
+| Mac settings (microphone, Command Mode, Whisper mode and the rest) | Murmur's preferences (`defaults read com.judelewis.murmur`) |
 | Snippets | ~/Library/Application Support/Murmur/snippets.json; on iPhone, the app's preferences |
 | Menu choices and recent dictations | Murmur's preferences (`defaults read com.judelewis.murmur`) |
 | Murmur's log | The Mac's system log, subsystem com.judelewis.murmur |
@@ -110,3 +111,41 @@ Jude asked for Wispr Flow's best ideas and picked six: snippets, spoken commands
 - **Hold Fn** waits half a second, longer than a tap, so double tap still works and Fn+key shortcuts throw the recording away rather than leaving Murmur listening.
 - **Music down** lowers the whole Mac's volume, since there's no general way to lower just other apps. It goes back only if untouched, so Murmur never undoes a change you made.
 - **The keyboard looks like Wispr Flow's**: a top bar for talking and number and punctuation keys for small edits, so you don't need to switch keyboards as often.
+
+## Mac extras from Wispr Flow (added 2 Nov 2026)
+
+Jude asked what Wispr Flow's computer version does and picked five: Command Mode, fixing self-corrections, paste again, Whisper mode and choosing the microphone.
+
+- **Apple's on-device AI, not Claude or Wispr's servers.** Apple Intelligence runs on the Mac through FoundationModels: free, private, offline. Tested before building: a friendlier rewrite in 2.5 seconds; with three examples in the prompt, self-corrections fixed in about a second and ordinary text left alone (without examples it changed nothing).
+- **Self-corrections can only take words out** (SelfCorrection.accept): a small model that rewords or adds would be worse than none. It is only asked when a correction word is present.
+- **Command Mode is Fn and Control held**, Wispr's own shortcut, built on the same hold timing as Hold Fn. The selected text is read after the keys are let go, through Accessibility, with Command-C only for apps that don't answer, so the copy never mixes with held keys.
+- **Whisper mode is a volume boost before the model**, off by default. Parakeet already copes with quiet speech; the boost only helped real whispering at low volume (tested with the Mac's Whisper voice), and boosting near-silence could turn hiss into words.
+- **Microphone choice sets the recorder's own input**, leaving the Mac's default alone; Automatic only steps in with the lid shut. Rules in MicChoice.
+- **Murmur's own key presses are tagged** (eventSourceUserData) so its keyboard watch lets them through, and it waits for Control, Command and Fn to be let go before pressing keys itself, so they never mix.
+- **Apple's gentler safety setting** (`permissiveContentTransformations`, meant for rewriting the user's own text): the default one blocked "turn this into bullet points" on a shopping list about one time in three.
+- **Every AI call has a time limit** (3 seconds for self-corrections, 20 for Command Mode), so a slow model can't stop the next dictation.
+- **Test modes**: `.build/debug/Murmur --rewrite "instruction" "text"` and `--fix "text"` run the same AI steps as the app.
+- **The menu's ticks moved into a Settings submenu**, as the menu had grown long.
+- **The time limit doesn't wait for the model to stop** (OnDeviceAI.respond races the answer against a timer through one continuation). A task group would have waited for the model to notice it was cancelled, so a stuck model could still hold up the next dictation (found in review, 3 Nov 2026).
+
+## The extras on iPhone (added 3 Nov 2026)
+
+Jude asked for the "no wait" fix, Whisper mode, paste again and Command Mode on the phone, in one install. Choosing the microphone was left out: iOS switches to AirPods or a wired mic itself, and there's no lid.
+
+- **OnDeviceAI moved to MurmurSpeech** so the Mac and the iPhone app share it. The keyboard doesn't link it: only the app asks Apple Intelligence.
+- **The whole order with the fix lives in MurmurCore** (`Tidy.dictation(_:…fix:)`), with the AI call passed in, so both apps use one tested order.
+- **The app does the AI work, usually in the background**, as it does the listening. iOS has a `rateLimited` error for background apps asking too much; it shows as "Apple Intelligence is busy". The trace says whether the app was on screen each time, so a real phone shows how often that happens.
+- **Command Mode's selection is what iOS gives the keyboard** (`selectedText`). The answer only goes over the selection if that's still what's selected when it arrives; otherwise it stays in Recent. Undo puts the selection back.
+- **The last dictation is its own file** (last.txt), written once per dictation, for the "again" key: status.json is written ten times a second while listening, so long text doesn't belong in it.
+
+## Type as I speak (added 3 Nov 2026)
+
+Jude asked for the words to appear while talking, not at the end, and picked "type words as they settle" over words in the pill only or a different, live-only model (NVIDIA Nemotron, which keeps "um" and needs 600 MB more).
+
+- **Same model, read again each second.** LiveTyper reads the audio from 5 seconds before the settled words to now; LiveTranscript (MurmurCore) settles a word once two readings in a row agree on it, using FluidAudio's word timings. A reading takes about 60 ms on Jude's M3, so the text runs a second or two behind. FluidAudio's own SlidingWindowAsrManager was no good for this: it only confirms text after about 10 seconds.
+- **Words from the context part are dropped by time** (most of the word before the settled end), and the last settled word heard again a little later is dropped by spelling: on 3 Nov 2026 "part" came out twice without that. A word ending in the last 0.3 s waits, as it may be cut off.
+- **The last reading gets 0.6 s of silence after it**: without it the last sentence lost its question mark and a capital. With it (and 5 s of context), both test recordings came out exactly as reading them all at once (`Murmur --live`).
+- **The whole order runs on the settled text each time**, and LiveEdit types only the difference: usually just new words; a few deletions when a snippet, a two-word fix or casual style changes the end. Over 300 characters to delete means something is wrong (the cursor moved), so it stops and copies the dictation.
+- **Typed with key presses (unicode key events), not the clipboard**, whole characters at a time. Line breaks are pasted, since a typed Return sends messages; the clipboard is put back once at the end, so two pastes close together can't lose it.
+- **While Fn is held, deleting waits**: Fn and Delete is forward delete.
+- **No "no wait" fix while it's on**: the words are already typed. Command Mode still answers at the end.

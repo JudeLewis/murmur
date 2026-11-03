@@ -19,10 +19,10 @@ let package = Package(
     targets: [
         // Plain logic with no AppKit, UIKit or audio: tested by `swift test`.
         .target(name: "MurmurCore"),
-        // The speech model and microphone sound, shared by the Mac and the iPhone.
+        // The speech model, microphone sound and Apple's on-device AI, shared by the Mac and the iPhone.
         .target(
             name: "MurmurSpeech",
-            dependencies: [.product(name: "FluidAudio", package: "FluidAudio")]
+            dependencies: ["MurmurCore", .product(name: "FluidAudio", package: "FluidAudio")]
         ),
         // Screens shared by the Mac and the iPhone (the word list and snippets).
         .target(name: "MurmurUI", dependencies: ["MurmurCore"]),

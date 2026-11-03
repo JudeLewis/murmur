@@ -11,6 +11,7 @@ Separate from Clocked In (~/Developer/clocked-in). Never touch that folder from 
 ## Stack
 
 - Swift 6.2 and Swift Package Manager for the Mac app, with no Xcode project. Everything is plain text files.
+- Apple's FoundationModels (Apple Intelligence, on the Mac, free and offline) for Command Mode and fixing self-corrections. Checked available on Jude's Mac on 2 Nov 2026.
 - AppKit for the menu bar, the event tap and the floating pill; SwiftUI inside the pill.
 - iPhone: an app and a keyboard extension in SwiftUI and UIKit, built from iPhone/Murmur.xcodeproj (written by hand; its folders App, Keyboard and Shared are picked up automatically, so new files need no project edits). It uses MurmurCore and MurmurSpeech from the Swift package.
 - FluidAudio (github.com/FluidInference/FluidAudio) for speech to text, with `traits: []` so only its speech-to-text part is built.
@@ -24,7 +25,9 @@ Separate from Clocked In (~/Developer/clocked-in). Never touch that folder from 
 | build | `swift build` |
 | unit tests | `swift test` |
 | check the speech model end to end | `./scripts/check-speech.sh` (makes speech with `say`, transcribes it, prints OK or NOT OK) |
-| try any recording | `.build/debug/Murmur --transcribe file.wav [--exact]` |
+| try any recording | `.build/debug/Murmur --transcribe file.wav [--exact] [--whisper]` |
+| try Type as I speak on a recording | `.build/debug/Murmur --live file.wav` (what would be on screen each second, then the finished text and the all-at-once text) |
+| try the on-device AI | `.build/debug/Murmur --rewrite "make this friendlier" "Send me the report."` or `--fix "Monday, no wait, I mean Tuesday."` |
 | install and run Jude's copy | `./scripts/install.sh` (build, wrap as Murmur.app, sign, copy to /Applications, open) |
 | install on Jude's iPhone | `./scripts/install-phone.sh` (build, sign, install, open; phone unlocked, plugged in or on the same Wi-Fi) |
 | read the iPhone's trace | `xcrun devicectl device copy from --device 00008140-000834E10E82801C --domain-type appGroupDataContainer --domain-identifier group.com.judelewis.murmur --source Library/Murmur/trace-app.txt --destination <scratchpad>/trace-app.txt` (also trace-keyboard.txt, status.json) |
@@ -46,12 +49,15 @@ Sources/MurmurCore/        Plain logic, no AppKit or audio; all of it tested
   Snippets.swift           Say a phrase, get saved text
   SpokenCommands.swift     "new line", "new paragraph", "press enter"; casual style; Tidy.dictation, the whole order
   Ducking.swift            Turning music down while listening (Mac)
+  OnDeviceAIPrompts.swift  Command Mode and self-correction prompts and checks; Whisper mode; ⌃⌘V; microphone choice
+  LiveTyping.swift         Type as I speak: which words have settled, and what to delete and type
   PhoneLink.swift          iPhone: what the keyboard shows, sends and types; the 10 minute session
   LinkStore.swift          iPhone: the files the app and keyboard share, and their trace
-Sources/MurmurSpeech/      Shared by Mac and iPhone: needs FluidAudio or the microphone
+Sources/MurmurSpeech/      Shared by Mac and iPhone: needs FluidAudio, the microphone or Apple Intelligence
   Transcriber.swift        Loading the Parakeet model and transcribing
   SpeechModel.swift        Tidy (Bark 3.0 Clean) or exact (Bark 3.0)
   MonoMix.swift            One microphone buffer to mono samples and a loudness level
+  OnDeviceAI.swift         Apple's on-device AI model (FoundationModels): Command Mode, self-corrections, time limits
 Sources/MurmurUI/          SwiftUI screens shared by Mac and iPhone: the word list and snippets (WordsView, WordsModel)
 Sources/Murmur/            The app: wires the logic to the Mac
   main.swift               Starts the app; also the --transcribe test mode
@@ -63,6 +69,9 @@ Sources/Murmur/            The app: wires the logic to the Mac
   Permissions.swift        Microphone, Accessibility, and the Fn key setting
   Settings.swift           Menu choices, and where the word list and snippets live
   SystemVolume.swift       The Mac's output volume, for turning music down
+  Selection.swift          The selected text in the app in front, for Command Mode
+  LiveTyper.swift          Type as I speak: reads the recording again each second and types settled words
+  Microphones.swift        The Mac's microphones (Core Audio) and whether the lid is shut
   Log.swift                The app's log: Fn timings and what Murmur did, never words or typed keys
 iPhone/                    The iPhone app and keyboard
   Murmur.xcodeproj         Two targets: MurmurPhone (the app) and MurmurKeyboard
@@ -91,7 +100,7 @@ archive/                   Finished TODO items
 - After changing the app, run `./scripts/install.sh` so the copy in Applications is the new one. Jude tests by dictating into real apps.
 - After upgrading FluidAudio, run `./scripts/check-speech.sh`.
 - British English in all user-facing text. No em dashes anywhere, in text or comments (RulesTests checks). Menu and pill wording must make sense to someone who doesn't code.
-- Murmur is on GitHub, private: github.com/JudeLewis/murmur. Push only when Jude asks.
+- Murmur is on GitHub, public since 2 Nov 2026: github.com/JudeLewis/murmur. Anyone can read what is pushed, so keep secrets and personal details out of committed files. Push only when Jude asks.
 - Never commit anything from `.env` files. `.env.local.example` holds names only.
 
 ## Gotchas
@@ -114,3 +123,4 @@ Format: **Rule**: why it matters.
 - docs/working-with-jude.md: how Jude likes to work.
 - TODO.md: what to do next.
 - FUTURE_TEST.md: what is not tested automatically, and why.
+- "How Murmur works on your Mac" (https://claude.ai/artifact/G7DUw2Ba9G9wmsFacXimHT): Jude's plain-English guide, a Claude Doc with a flow diagram. Edit it with the Claude Docs tools when Mac behaviour changes; SPEC.md still wins.

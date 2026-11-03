@@ -47,6 +47,37 @@ A recording stops by itself after 15 minutes and is written out as usual.
 - The Tink plays before the volume drops and the Pop after it comes back.
 - "Turn music down while listening" in the menu, ticked to start with. Mac only: iOS doesn't let Murmur change other apps' sound.
 
+### 2.7 Command Mode
+
+- Hold Fn and Control together (either first, within half a second of each other) for half a second, say what you want, let go. Control pressed later, during an ordinary Fn hold, throws that dictation away (2.5). Needs Apple Intelligence, which runs on the Mac, free and offline. On iPhone: the keyboard's ✨ button (9.7).
+- With text selected: it is rewritten as asked ("make this friendlier", "turn this into bullet points", "shorter") and the new text replaces it.
+- With nothing selected: Murmur writes what you asked for ("write a polite no thanks") where the cursor is.
+- The pill shows the bars while listening, then "Thinking". The reply gets British spelling and the word list; it is added to Recent.
+- Escape or another key while holding throws it away. If Apple Intelligence is off, the pill says how to turn it on. Too much text, a request the model won't do, or no answer within 20 seconds gets a short message instead. If the instruction itself couldn't be heard, the pill says to try again (it isn't kept for "Try the last recording again").
+- Replies are asked to be short and plain. Short placeholder lines the model adds anyway ("Dear [Name],", "[Your Name]") are taken out.
+- New text written where nothing was selected gets a space after it, like a dictation. British spelling in the reply only when British spelling is ticked.
+- The selected text is read after the keys are let go, through Accessibility (giving a busy app a quarter of a second); apps that don't share it get a quick Command-C, waiting up to half a second, with the clipboard put back if it changed. An app that says nothing is selected is believed.
+- "Command Mode: hold Fn and Control" in Settings, ticked to start with.
+
+### 2.8 Paste again
+
+- Control-Command-V pastes the last dictation again, wherever the cursor is now, for when it landed in the wrong place. Also "Paste last dictation again" in the menu.
+- Murmur keeps that shortcut for itself; the app in front doesn't see it. It waits for the keys to be let go before pasting.
+- On iPhone: the keyboard's "again" key (9.4).
+
+### 2.9 Type as I speak
+
+- "Type as I speak" in Settings, ticked to start with. The words appear where the cursor is while you talk, a second or two behind you, instead of all at once at the end. For double tap and hold Fn; Command Mode still answers at the end.
+- About once a second Murmur reads the last few seconds again with the same speech model (the 5 seconds before what's already typed, for context, plus what's new; the last reading gets a little silence after it, so the last sentence keeps its full stop), and types each word once two readings in a row agree on it. Pausing makes the last words appear. If no words agree for 8 seconds, the ones said more than 2 seconds ago are typed anyway.
+- Everything in 4 still happens to what's typed: British spelling, the word list, snippets, "new line", casual style. When a later word changes how the end should look (a snippet, a two-word fix, casual style's full stop), Murmur deletes the last few characters and types them again.
+- When you stop, the rest is typed with a space after it, and "press enter" presses Return.
+- The "no wait, I mean" fix (4.8) isn't used while this is on: those words are already typed.
+- Escape stops listening and leaves what's already typed. The pill says "Stopped. What's typed stays." (or "Cancelled" if nothing was typed yet).
+- Murmur types with key presses rather than the clipboard. Text with a line break in it is pasted instead, since a typed line break would send a message; the clipboard is put back once, at the end. While Fn is held (Hold Fn to talk), a correction that needs deleting waits until Fn is let go, since Fn and Delete deletes forwards, and so does what comes after it.
+- If it would ever need to delete more than 300 characters (the cursor was moved, say), it stops typing: the whole dictation is copied and the pill says "Typing stopped part way. The whole dictation is copied."
+- If the last reading fails twice, the pill says "Couldn't write the last few words."
+- Needs the speech model ready and Accessibility; otherwise the dictation is pasted at the end as before. Words go wherever the cursor is, so don't click elsewhere while talking.
+
 ## 3. Speech to text
 
 ### 3.1 The models
@@ -61,6 +92,17 @@ A recording stops by itself after 15 minutes and is written out as usual.
 - The model loads when Murmur opens. The menu shows "Getting the speech model ready" with a percentage while it downloads.
 - If you dictate before it's ready, the pill says "Getting the speech model ready" and the text appears once it is.
 - If loading fails (no internet on the first run), the menu says so and offers "Try loading the speech model again".
+
+### 3.3 The microphone
+
+- "Microphone" in the menu: Automatic, or one of the Mac's microphones (each with a tick).
+- Automatic uses the Mac's own default input. Only if that is the built-in microphone and the lid is shut does it use another one, since the built-in one only hears the keyboard. Software microphones (from Zoom, Teams, BlackHole) are never picked automatically, only by hand.
+- A chosen microphone that isn't plugged in, or won't start, falls back to Automatic for that dictation.
+
+### 3.4 Whisper mode
+
+- "Whisper mode (for speaking quietly)" in Settings, off to start with (on iPhone, in the Murmur app's Settings). Quiet recordings are made up to 20 times louder before the model hears them.
+- Tested 2 Nov 2026 with the Mac's whispering voice at 2% volume: without it "book" was heard as "put"; with it, every word was right. Normal and merely quiet speech came out the same either way, so it stays off unless you whisper (boosting silence can turn hiss into words).
 
 ## 4. The text that's pasted
 
@@ -114,6 +156,16 @@ On by default. Turns American spellings into British ones from a fixed list (col
 - Mac: per app. The menu shows "Casual style in Messages" (or whichever app is in front) with a tick. Messages and WhatsApp start ticked. The app in front when listening starts decides.
 - iPhone: the "aa" switch on the keyboard, which stays as you left it.
 
+### 4.8 Self-corrections
+
+- "Fix “no wait, I mean” (Apple Intelligence)" in Settings, ticked to start with. On iPhone too, in the Murmur app's Settings: there the app does it after writing, usually in the background; if iOS won't let the AI answer then, what you said is typed.
+- "Let's meet on Monday, no wait, I mean Tuesday at three" becomes "Let's meet on Tuesday at three."
+- The on-device AI is only asked when the dictation has a correction word (no wait, I mean, sorry, actually, scratch that, rather, or "no,"), so other dictations aren't slowed down. It adds about half a second to a second.
+- Its answer is only used if it carefully takes words out: its words are in what you said, in the same order; it ends with the same word (the correction comes last); it keeps every "not", "never" and "n't"; and it keeps "press enter", "new line", "new paragraph" and snippet phrases. Otherwise what you said is kept.
+- It gets 3 seconds; if the AI is slower, what you said is kept.
+- It happens after British spelling and the word list, and before line breaks, casual style and snippets.
+- Not while "Type as I speak" is on (2.9).
+
 ## 5. The pill
 
 - A black capsule at the bottom middle of the screen, above the Dock.
@@ -134,13 +186,14 @@ The last 20 dictations are kept, newest first; the menu shows 10. Clicking one c
 
 ### 6.3 What's in the menu
 
-1. A status line ("Ready. Double-tap Fn to talk.")
+1. A status line ("Ready. Double-tap or hold Fn to talk.")
 2. Start or Stop dictation
 3. Warnings, only when something needs setting up (see 7)
-4. Recent (click one to copy it)
-5. Word list and snippets…
-6. Tidy speech (drops um and er), British spelling, Casual style in (the app in front), Hold Fn to talk, Turn music down while listening, Sounds, Open at login: each with a tick
-7. Quit Murmur
+4. Recent (click one to copy it), Paste last dictation again (⌃⌘V), Word list and snippets…
+5. Casual style in (the app in front), with a tick
+6. Microphone (3.3)
+7. Settings: Type as I speak, Tidy speech (drops um and er), British spelling, Fix “no wait, I mean” (Apple Intelligence), Whisper mode (for speaking quietly), Hold Fn to talk, Command Mode: hold Fn and Control, Turn music down while listening, Sounds, Open at login: each with a tick
+8. Quit Murmur
 
 ## 7. Setting up
 
@@ -166,7 +219,7 @@ The first time Murmur runs from Applications, it turns on Open at Login. After t
 - The internet is used only to download the speech models.
 - Recent dictations are kept in Murmur's settings on this Mac only.
 - Murmur's log (in the Mac's system log) holds Fn timings, modifier key codes and what Murmur did, such as "Wrote 84 characters". Never the words, and never ordinary typed keys.
-- On iPhone the same holds: audio stays in memory, and the internet is only used to download the model. The last dictation's text waits in the app and keyboard's shared folder until the next one, so the keyboard can type it. Recent dictations and the word list stay in the app on the phone.
+- On iPhone the same holds: audio stays in memory, and the internet is only used to download the model. The last dictation's text is kept in the app and keyboard's shared folder until the next one, so the keyboard can type it (and type it again). Command Mode's selected text goes through that folder too, and only Apple Intelligence on the phone sees it. Recent dictations and the word list stay in the app on the phone.
 
 ## 9. On iPhone
 
@@ -178,7 +231,7 @@ Two parts: the Murmur app, which listens and writes, and the Murmur keyboard, wh
   - A status line: "Getting the speech model ready (42%). After an update this takes a few minutes. Keep Murmur open until it says Ready.", "Ready", or "Keyboard on. Turns off 10 minutes after your last dictation." with a "Turn off now" button.
   - A big Talk button: tap to start, tap to stop. The text shows underneath and is copied, ready to paste anywhere. If no keyboard session was on, the microphone goes off again once the text is written.
   - Recent: the last 10 dictations. Tap one to copy it.
-  - Tidy speech (drops um and er) and British spelling, both on to start with.
+  - Tidy speech (drops um and er) and British spelling, both on to start with. Fix “no wait, I mean” (Apple Intelligence), on to start with (4.8), and Whisper mode (for speaking quietly), off to start with (3.4).
   - Word list and snippets: the same screen as the Mac's window (4.2 and 4.5). Changes work from the next dictation.
   - Setting up the keyboard: the steps in 9.5, with a button that opens Murmur's page in Settings.
 - The first time it opens, the speech model downloads (about 400 MB, best on Wi-Fi), then gets ready for the iPhone's chip. That takes one to a few minutes, and again after every update, because iOS throws away the prepared copy when the app is reinstalled. After that it is ready in under a second each time the app opens.
@@ -187,7 +240,7 @@ Two parts: the Murmur app, which listens and writes, and the Murmur keyboard, wh
 ### 9.2 The Murmur keyboard
 
 - Switch to it with 🌐 in any app. Tap 🌐 again to go back to Apple's keyboard to type letters.
-- Laid out like Wispr Flow's keyboard. Along the top, a bar: the "Aa" casual switch on the left (4.7), a status line, a grey "turn mic off" button (a crossed-out mic, only while a session is on and nothing is being said or written), and a blue mic button on the right. Below, keys like the iPhone's own number keys: 1 to 0; - / : ; ( ) £ & @ "; undo, . , ? ! ' and delete (hold to repeat); then space and return. A 🌐 key is added on iPhones that don't show their own below the keyboard. Keys give a light tap you can feel.
+- Laid out like Wispr Flow's keyboard. Along the top, a bar: the "Aa" casual switch on the left (4.7), a status line, a grey "turn mic off" button (a crossed-out mic, only while a session is on and nothing is being said or written), a ✨ button for Command Mode (9.7; only when Apple Intelligence is on and a dictation could start), and a blue mic button on the right. Below, keys like the iPhone's own number keys: 1 to 0; - / : ; ( ) £ & @ "; undo, . , ? ! ' and delete (hold to repeat); then "again", space and return. A 🌐 key is added on iPhones that don't show their own below the keyboard. Keys give a light tap you can feel.
 - The top bar:
   - No session: "Tap the mic to turn Murmur on", and the mic button says Start.
   - Ready: "Tap the mic to talk". While the model is still getting ready: "The speech model is getting ready. Open Murmur and keep it on screen until it says Ready." Talking still works; the text comes once the model is ready.
@@ -209,7 +262,8 @@ Two parts: the Murmur app, which listens and writes, and the Murmur keyboard, wh
 ### 9.4 Talking from the keyboard
 
 - Tap the mic to start and ✓ to finish; the text is typed where the cursor is. ✕ throws the recording away.
-- Undo takes the last dictation back out, as long as the cursor is still straight after it; otherwise it says "Nothing to undo."
+- Undo takes the last dictation back out, as long as the cursor is still straight after it; otherwise it says "Nothing to undo." After Command Mode it also puts back the text that was selected.
+- "Again" types the last dictation again where the cursor is now (with the same spacing as a dictation), for when it landed in the wrong place; "Nothing to type yet." if there's none. Undo can take it back out.
 - Snippets, "new line", "new paragraph" and casual style work as on the Mac (4.5 to 4.7). "Press enter" at the end types a Return after the text, which sends in apps where Return sends; that dictation can't be undone.
 - A space goes after the text, and before it too if it would otherwise join the word or punctuation in front. No space after an opening bracket or quote, @, # or /.
 - Only the keyboard that started a dictation types it, once. If the keyboard closes before the text is ready, the text isn't typed anywhere; it's in Recent in the app.
@@ -225,3 +279,12 @@ Two parts: the Murmur app, which listens and writes, and the Murmur keyboard, wh
 ### 9.6 The phone's trace
 
 The app and the keyboard each keep a list of their last 200 events with times ("sent start", "typed 84 characters"), never the words. It lives in their shared folder on the phone, so Claude can read it from the Mac when something goes wrong.
+
+### 9.7 Command Mode from the keyboard
+
+- The ✨ button, next to the mic: select some text (or none), tap ✨, say what to do ("make this friendlier", "write a polite no thanks"), tap ✓. ✕ throws it away.
+- The Murmur app turns what you said into the instruction and asks Apple Intelligence on the iPhone, with the same prompts, checks and 20 second limit as the Mac (2.7). While it works the keyboard says "Thinking".
+- With text selected, the answer is typed in its place exactly as it comes (no spaces added); Undo puts the selected text back. If something else is selected by the time the answer comes (the cursor moved), it isn't typed: the keyboard says so and the answer is in Recent in the app. With nothing selected, the answer is typed like a dictation.
+- The selected text is what iOS shares with the keyboard; some apps share none, and then it's treated as nothing selected (the answer is typed over the real selection, and Undo can't bring it back).
+- The app is usually in the background while this happens. iOS limits how much a background app may ask Apple Intelligence; if it says no, the keyboard says "Apple Intelligence is busy. Try again in a moment." (On 3 Nov 2026 it answered in the background every time Jude tried.)
+- Answers go into Recent in the app, like dictations.

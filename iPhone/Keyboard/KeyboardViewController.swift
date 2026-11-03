@@ -75,6 +75,8 @@ final class KeyboardTalker {
     @ObservationIgnored private var status: PhoneStatus?
     @ObservationIgnored private var wait = KeyboardWait()
     @ObservationIgnored private var lastTyped = LastTyped()
+    /// What was selected when ✨ was tapped, so Undo can put it back.
+    @ObservationIgnored private var commandSelection: String?
     @ObservationIgnored private let tapFeel = UIImpactFeedbackGenerator(style: .light)
     @ObservationIgnored private var poll: Timer?
     @ObservationIgnored private var repeatDelete: Timer?
@@ -86,6 +88,11 @@ final class KeyboardTalker {
     }
 
     var showsGlobe: Bool { keyboard?.needsInputModeSwitchKey ?? false }
+    /// ✨ for Command Mode (SPEC.md 9.7).
+    var showsCommand: Bool { KeyboardLink.showsCommand(in: state, ai: aiOn) }
+    private var aiOn = false
+    /// The recording being made or written is a Command Mode instruction.
+    private(set) var isCommand = false
 
     func appeared() {
         Bell.listen(for: Bell.toKeyboard)
@@ -114,6 +121,9 @@ final class KeyboardTalker {
         let fullAccess = keyboard?.hasFullAccess ?? false
         status = fullAccess ? Shared.store?.status() : nil
         state = KeyboardLink.state(of: status, now: .now, fullAccess: fullAccess)
+        // Only set when changed, so the keyboard isn't redrawn every second for nothing.
+        if aiOn != (status?.ai ?? false) { aiOn.toggle() }
+        if isCommand != (status?.command ?? false) { isCommand.toggle() }
         if state == .listening {
             if let level = status?.level { levels.add(level) }
         } else {
@@ -132,6 +142,17 @@ final class KeyboardTalker {
                 lastTyped.typed(typed)
             }
             trace("typed \(text.count) characters\(pressEnter ? ", then Return" : "")")
+        case .replace(let text):
+            // Only over the text that was selected: if the cursor moved meanwhile,
+            // the answer would land in the wrong place.
+            guard let proxy = keyboard?.textDocumentProxy, proxy.selectedText == commandSelection else {
+                show("The selection changed, so the answer wasn't typed. It's in Recent in the Murmur app.")
+                trace("answer not typed: the selection changed")
+                break
+            }
+            proxy.insertText(text)
+            lastTyped.typed(text, replacing: commandSelection)
+            trace("typed \(text.count) characters over the selection")
         case .note(let message):
             show(message)
         case .nothing:
@@ -153,6 +174,34 @@ final class KeyboardTalker {
         }
     }
 
+    /// ✨: listen for an instruction about the selected text (SPEC.md 9.7).
+    func command() {
+        refresh()
+        guard showsCommand else { return }
+        tapFeel.impactOccurred()
+        let selected = keyboard?.textDocumentProxy.selectedText
+        let selection = selected?.isEmpty == false ? selected : nil
+        commandSelection = selection
+        send(KeyboardRequest(id: KeyboardRequest.newID(), kind: .command, casual: casual, selection: selection))
+    }
+
+    /// "again": the last dictation, typed again where the cursor is now (SPEC.md 9.4).
+    func typeAgain() {
+        tapFeel.impactOccurred()
+        guard keyboard?.hasFullAccess == true else {
+            show("Murmur needs Full Access: open the Murmur app and follow Setting up.")
+            return
+        }
+        guard let text = Shared.store?.last(), !text.isEmpty, let proxy = keyboard?.textDocumentProxy else {
+            show("Nothing to type yet.")
+            return
+        }
+        let typed = Tidy.forInsertion(text, after: proxy.documentContextBeforeInput)
+        proxy.insertText(typed)
+        lastTyped.typed(typed)
+        trace("typed the last dictation again")
+    }
+
     func cancel() {
         tapFeel.impactOccurred()
         send(KeyboardRequest(id: KeyboardRequest.newID(), kind: .cancel))
@@ -168,12 +217,13 @@ final class KeyboardTalker {
     /// Takes the last dictation back out, if the cursor is still straight after it.
     func undo() {
         tapFeel.impactOccurred()
-        guard let proxy = keyboard?.textDocumentProxy, let count = lastTyped.undo(before: proxy.documentContextBeforeInput) else {
+        guard let proxy = keyboard?.textDocumentProxy, let undo = lastTyped.undo(before: proxy.documentContextBeforeInput) else {
             show("Nothing to undo.")
             return
         }
-        for _ in 0..<count { proxy.deleteBackward() }
-        trace("undid a dictation")
+        for _ in 0..<undo.delete { proxy.deleteBackward() }
+        if !undo.retype.isEmpty { proxy.insertText(undo.retype) }
+        trace(undo.retype.isEmpty ? "undid a dictation" : "undid a command, selected text put back")
     }
 
     private func send(_ request: KeyboardRequest) {

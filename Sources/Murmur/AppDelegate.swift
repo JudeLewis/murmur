@@ -38,6 +38,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var ducked: (original: Float, lowered: Float, device: AudioDeviceID)?
     private var quitSignal: DispatchSourceSignal?
     private var wordsWindow: NSWindow?
+    /// This dictation is a Command Mode instruction, not text to paste.
+    private var commandMode = false
+    /// Type as I speak (SPEC.md 2.9), while it's typing this dictation.
+    private var liveTyper: LiveTyper?
+    private var lastPasteAgain = Date.distantPast
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Settings.registerDefaults()
@@ -53,7 +58,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         keys.onHoldStarted = { [weak self] in self?.holdStarted() }
         keys.onHoldEnded = { [weak self] in self?.holdEnded() }
         keys.onHoldCancelled = { [weak self] in self?.holdCancelled() }
+        keys.onCommandHoldStarted = { [weak self] in self?.commandHoldStarted() }
+        keys.onPasteAgain = { [weak self] in self?.pasteAgain() }
         keys.holdToTalk = Settings.holdToTalk
+        keys.commandMode = Settings.commandMode
 
         turnOnOpenAtLoginOnce()
         putVolumeBackAfterCrash()
@@ -119,27 +127,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func holdEnded() { perform(flow.holdEnded()) }
     private func holdCancelled() { perform(flow.holdCancelled()) }
 
+    /// Fn and Control held: listen for an instruction (SPEC.md 2.7).
+    private func commandHoldStarted() {
+        guard flow.phase == .idle else { return }
+        guard OnDeviceAI.isAvailable else {
+            pill.flash(OnDeviceAI.message(for: OnDeviceAI.Problem.unavailable), seconds: 5)
+            return
+        }
+        commandMode = true
+        perform(flow.holdStarted())
+        if flow.phase != .recording { commandMode = false }
+    }
+
     private func cancel() { perform(flow.cancel()) }
 
     private func cancelled() {
+        commandMode = false
         stopWatching()
         turnMusicBackUp()
         _ = recorder?.stop()
         recorder = nil
+        if let live = liveTyper, !live.typed.isEmpty {
+            live.stop()
+            liveTyper = nil
+            pill.flash("Stopped. What's typed stays.", seconds: 2)
+            return
+        }
+        liveTyper?.stop()
+        liveTyper = nil
         pill.flash("Cancelled", seconds: 1.2)
     }
 
     private func startRecording() {
         guard Permissions.microphoneAllowed else {
             log.notice("Can't record: microphone not allowed")
+            commandMode = false
             flow.finished()
             pill.flash("Murmur needs the microphone. Click the Murmur icon in the menu bar.", seconds: 5)
             return
         }
+        // Only look at the microphones when there's a choice to make.
+        let lidClosed = Microphones.lidClosed
+        let mic = Settings.microphoneUID == nil && !lidClosed ? nil : MicChoice.pick(
+            from: Microphones.all(), chosen: Settings.microphoneUID, lidClosed: lidClosed,
+            defaultIsBuiltIn: Microphones.defaultIsBuiltIn)
         do {
-            recorder = try Recorder()
+            if let mic {
+                // A chosen mic that won't start falls back to the Mac's default.
+                if let chosen = try? Recorder(device: mic.id) {
+                    log.notice("Using microphone: \(mic.name, privacy: .public)")
+                    recorder = chosen
+                } else {
+                    log.notice("Couldn't use \(mic.name, privacy: .public); using the default microphone")
+                    recorder = try Recorder()
+                }
+            } else {
+                recorder = try Recorder()
+            }
         } catch {
             log.error("Microphone failed to start: \(error.localizedDescription)")
+            commandMode = false
             flow.finished()
             pill.flash("Couldn't start the microphone.", seconds: 4)
             return
@@ -165,45 +212,170 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard !Task.isCancelled else { return }
             self?.toggle()
         }
+        startTypingLive()
+    }
+
+    /// Type as I speak (SPEC.md 2.9): not for Command Mode, and only once the
+    /// model is ready and Murmur may press keys; otherwise it's pasted at the end.
+    private func startTypingLive() {
+        guard Settings.typeAsISpeak, !commandMode, loading == .ready, AXIsProcessTrusted(), let recorder else { return }
+        let casual = dictatingInto.map(Settings.casualApps.contains) ?? false
+        let words = Settings.words()
+        let snippets = Settings.snippets
+        let british = Settings.british
+        liveTyper = LiveTyper(recorder: recorder, transcriber: transcriber, model: Settings.model, whisper: Settings.whisperMode) {
+            Tidy.dictation($0, words: words, snippets: snippets, british: british, casual: casual)
+        }
+        liveTyper?.start()
     }
 
     private func stopAndTranscribe() {
         stopWatching()
+        // The kind of dictation goes with the recording from here on, not in a loose flag.
+        let isCommand = commandMode
+        commandMode = false
         guard let recorder else {
             flow.finished()
             return
         }
         self.recorder = nil
+        if let live = liveTyper {
+            liveTyper = nil
+            let seconds = recorder.stopListening()
+            log.notice("Recorded \(seconds, format: .fixed(precision: 1)) s, typing as you spoke")
+            turnMusicBackUp()
+            playSound("Pop")
+            pill.show(.working("Writing"))
+            Task { await finishTypingLive(live) }
+            return
+        }
         let samples = recorder.stop()
         log.notice("Recorded \(Double(samples.count) / recorder.sampleRate, format: .fixed(precision: 1)) s at \(Int(recorder.sampleRate)) Hz")
         turnMusicBackUp()
         playSound("Pop")
-        transcribe(samples, sampleRate: recorder.sampleRate)
+        transcribe(samples, sampleRate: recorder.sampleRate, command: isCommand)
     }
 
-    private func transcribe(_ samples: [Float], sampleRate: Double) {
-        pill.show(.working(loading == .ready ? "Writing" : "Getting the speech model ready"))
+    private func finishTypingLive(_ live: LiveTyper) async {
+        let dictation = await live.finish()
+        flow.finished()
+        updateIcon()
+        let text = dictation.text
+        log.notice("Typed \(text.count) characters as you spoke\(dictation.pressEnter ? ", then Return" : "", privacy: .public)")
+        if !text.isEmpty {
+            var recent = Settings.recent
+            recent.add(text)
+            Settings.recent = recent
+        }
+        if live.gaveUp {
+            // Part of it is typed already, so pasting it all would double that part.
+            Paster.copy(Tidy.forInsertion(text, pressEnter: dictation.pressEnter))
+            pill.flash("Typing stopped part way. The whole dictation is copied.", seconds: 5)
+        } else if live.lostTheEnd {
+            pill.flash("Couldn't write the last few words.", seconds: 4)
+        } else if text.isEmpty && !dictation.pressEnter {
+            pill.flash("Didn't catch that.", seconds: 1.5)
+        } else {
+            if dictation.pressEnter { Paster.pressReturn() }
+            pill.hide()
+        }
+    }
+
+    private func transcribe(_ samples: [Float], sampleRate: Double, command: Bool = false) {
+        pill.show(.working(loading == .ready ? (command ? "Thinking" : "Writing") : "Getting the speech model ready"))
         let model = Settings.model
+        let whisper = Settings.whisperMode
         Task {
             do {
-                let raw = try await transcriber.transcribe(samples, sampleRate: sampleRate, model: model)
+                // Off the main thread: a long recording is millions of samples.
+                let audio = whisper ? await Task.detached { Loudness.boosted(samples, maxGain: Loudness.whisperGain) }.value : samples
+                let raw = try await transcriber.transcribe(audio, sampleRate: sampleRate, model: model)
                 unsent = nil
                 if Settings.model == model { loading = .ready }
-                deliver(raw)
+                if command {
+                    await runCommand(raw)
+                } else {
+                    await deliver(raw)
+                }
             } catch {
                 log.error("Transcription failed: \(error.localizedDescription)")
-                unsent = (samples, sampleRate)
                 flow.finished()
                 updateIcon()
+                if command {
+                    // An instruction is short and its selection may have changed: just say it again.
+                    pill.flash("Couldn't hear the instruction. Try again.", seconds: 4)
+                    return
+                }
+                unsent = (samples, sampleRate)
                 pill.flash("Couldn't turn that into text. Try again from the Murmur menu.", seconds: 5)
             }
         }
     }
 
-    private func deliver(_ raw: String) {
+    /// Command Mode: the spoken instruction goes to the on-device AI with the
+    /// selected text (or none, to write something new), and the reply replaces it.
+    private func runCommand(_ raw: String) async {
+        let words = Settings.words()
+        let instruction = Tidy.finish(raw, words: words, british: Settings.british)
+        guard !instruction.isEmpty else {
+            finishCommand(problem: "Didn't catch that.")
+            return
+        }
+        pill.show(.working("Thinking"))
+        let selection = await Selection.read()
+        log.notice("Command Mode: \(selection == nil ? "writing new text" : "rewriting \(selection!.count) characters", privacy: .public)")
+        do {
+            let text = try await OnDeviceAI.command(
+                instruction, selection: selection, words: words, british: Settings.british, addSpace: selection == nil)
+            finishCommand(problem: nil)
+            var recent = Settings.recent
+            recent.add(text)
+            Settings.recent = recent
+            await Paster.waitForKeysUp()
+            if Paster.paste(text) {
+                pill.hide()
+            } else {
+                pill.flash("Copied. Press ⌘V to paste.", seconds: 4)
+            }
+        } catch {
+            log.error("Command Mode failed")
+            finishCommand(problem: OnDeviceAI.message(for: error))
+        }
+    }
+
+    private func finishCommand(problem: String?) {
+        flow.finished()
+        updateIcon()
+        if let problem { pill.flash(problem, seconds: 4) }
+    }
+
+    /// Control-Command-V or the menu: the last dictation, pasted again (SPEC.md 2.8).
+    private func pasteAgain() {
+        guard Date.now.timeIntervalSince(lastPasteAgain) > 1 else { return }
+        lastPasteAgain = .now
+        guard let text = Settings.recent.items.first else {
+            pill.flash("Nothing to paste yet.", seconds: 1.5)
+            return
+        }
+        Task {
+            // Wait for Control and Command to be let go, so they don't mix with the paste.
+            await Paster.waitForKeysUp()
+            if !Paster.paste(Tidy.forInsertion(text)) { pill.flash("Copied. Press ⌘V to paste.", seconds: 4) }
+        }
+    }
+
+    private func deliver(_ raw: String) async {
         let casual = dictatingInto.map(Settings.casualApps.contains) ?? false
-        let dictation = Tidy.dictation(
-            raw, words: Settings.words(), snippets: Settings.snippets, british: Settings.british, casual: casual)
+        let words = Settings.words()
+        let snippets = Settings.snippets
+        let fixOn = Settings.fixCorrections
+        let triggers = snippets.map(\.trigger)
+        // "Monday, no wait, I mean Tuesday": the on-device AI may only take words out (SPEC.md 4.8).
+        let dictation = await Tidy.dictation(raw, words: words, snippets: snippets, british: Settings.british, casual: casual) { finished in
+            guard fixOn, let fixed = try? await OnDeviceAI.fixSelfCorrection(in: finished, keeping: triggers) else { return nil }
+            log.notice("Fixed a self-correction")
+            return fixed
+        }
         let text = dictation.text
         flow.finished()
         updateIcon()
@@ -326,6 +498,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        // Items keep the enabled state set here (Paste again is greyed out with nothing to paste).
+        menu.autoenablesItems = false
 
         let status = NSMenuItem(title: statusLine, action: nil, keyEquivalent: "")
         status.isEnabled = false
@@ -369,11 +543,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let recentItem = NSMenuItem(title: "Recent (click one to copy it)", action: nil, keyEquivalent: "")
         recentItem.submenu = recentMenu
         menu.addItem(recentItem)
+        let again = item("Paste last dictation again", #selector(pasteAgainFromMenu), key: "v")
+        again.keyEquivalentModifierMask = [.control, .command]
+        again.isEnabled = !Settings.recent.items.isEmpty
+        menu.addItem(again)
         menu.addItem(item("Word list and snippets…", #selector(openWords)))
         menu.addItem(.separator())
 
-        menu.addItem(item("Tidy speech (drops um and er)", #selector(toggleTidy), on: Settings.model == .tidy))
-        menu.addItem(item("British spelling", #selector(toggleBritish), on: Settings.british))
         if let front = NSWorkspace.shared.frontmostApplication, let id = front.bundleIdentifier,
            id != Bundle.main.bundleIdentifier {
             let casual = item("Casual style in \(front.localizedName ?? "this app")", #selector(toggleCasual(_:)),
@@ -381,12 +557,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             casual.representedObject = id
             menu.addItem(casual)
         }
-        menu.addItem(item("Hold Fn to talk", #selector(toggleHoldToTalk), on: Settings.holdToTalk))
-        menu.addItem(item("Turn music down while listening", #selector(toggleDuckMusic), on: Settings.duckMusic))
-        menu.addItem(item("Sounds", #selector(toggleSounds), on: Settings.sounds))
-        menu.addItem(item("Open at login", #selector(toggleOpenAtLogin), on: SMAppService.mainApp.status == .enabled))
+        menu.addItem(microphoneMenu())
+        menu.addItem(settingsMenu())
         menu.addItem(.separator())
         menu.addItem(item("Quit Murmur", #selector(quit), key: "q"))
+    }
+
+    /// Automatic, then each microphone the Mac has (SPEC.md 3.3).
+    private func microphoneMenu() -> NSMenuItem {
+        let submenu = NSMenu()
+        let chosen = Settings.microphoneUID
+        let mics = Microphones.all()
+        let automatic = item("Automatic", #selector(chooseMicrophone(_:)), on: chosen == nil || !mics.contains { $0.uid == chosen })
+        submenu.addItem(automatic)
+        let hint = NSMenuItem(title: "The Mac's own choice; another mic when the lid is shut", action: nil, keyEquivalent: "")
+        hint.isEnabled = false
+        submenu.addItem(hint)
+        submenu.addItem(.separator())
+        for mic in mics {
+            let entry = item(mic.name, #selector(chooseMicrophone(_:)), on: mic.uid == chosen)
+            entry.representedObject = mic.uid
+            submenu.addItem(entry)
+        }
+        let menuItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+        menuItem.submenu = submenu
+        return menuItem
+    }
+
+    private func settingsMenu() -> NSMenuItem {
+        let submenu = NSMenu()
+        submenu.addItem(item("Type as I speak", #selector(toggleTypeAsISpeak), on: Settings.typeAsISpeak))
+        submenu.addItem(item("Tidy speech (drops um and er)", #selector(toggleTidy), on: Settings.model == .tidy))
+        submenu.addItem(item("British spelling", #selector(toggleBritish), on: Settings.british))
+        submenu.addItem(item("Fix \u{201C}no wait, I mean\u{201D} (Apple Intelligence)", #selector(toggleFixCorrections), on: Settings.fixCorrections))
+        submenu.addItem(item("Whisper mode (for speaking quietly)", #selector(toggleWhisperMode), on: Settings.whisperMode))
+        submenu.addItem(.separator())
+        submenu.addItem(item("Hold Fn to talk", #selector(toggleHoldToTalk), on: Settings.holdToTalk))
+        submenu.addItem(item("Command Mode: hold Fn and Control", #selector(toggleCommandMode), on: Settings.commandMode))
+        submenu.addItem(item("Turn music down while listening", #selector(toggleDuckMusic), on: Settings.duckMusic))
+        submenu.addItem(item("Sounds", #selector(toggleSounds), on: Settings.sounds))
+        submenu.addItem(item("Open at login", #selector(toggleOpenAtLogin), on: SMAppService.mainApp.status == .enabled))
+        let menuItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+        menuItem.submenu = submenu
+        return menuItem
     }
 
     private func item(_ title: String, _ action: Selector, on: Bool? = nil, key: String = "") -> NSMenuItem {
@@ -455,6 +668,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleDuckMusic() { Settings.duckMusic.toggle() }
+
+    @objc private func toggleFixCorrections() { Settings.fixCorrections.toggle() }
+
+    @objc private func toggleWhisperMode() { Settings.whisperMode.toggle() }
+    @objc private func toggleTypeAsISpeak() { Settings.typeAsISpeak.toggle() }
+
+    @objc private func toggleCommandMode() {
+        Settings.commandMode.toggle()
+        keys.commandMode = Settings.commandMode
+    }
+
+    @objc private func chooseMicrophone(_ sender: NSMenuItem) {
+        Settings.microphoneUID = sender.representedObject as? String
+    }
+
+    @objc private func pasteAgainFromMenu() { pasteAgain() }
 
     @objc private func toggleTidy() {
         Settings.model = Settings.model == .tidy ? .exact : .tidy

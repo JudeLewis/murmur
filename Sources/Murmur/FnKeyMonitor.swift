@@ -12,12 +12,19 @@ final class FnKeyMonitor {
     var onDoubleTap: () -> Void = {}
     var onEscape: () -> Void = {}
     var onHoldStarted: () -> Void = {}
+    var onCommandHoldStarted: () -> Void = {}
+    var onPasteAgain: () -> Void = {}
     var onHoldEnded: () -> Void = {}
     var onHoldCancelled: () -> Void = {}
 
     var holdToTalk: Bool {
         get { watcher.holdToTalk }
         set { watcher.holdToTalk = newValue }
+    }
+
+    var commandMode: Bool {
+        get { watcher.commandMode }
+        set { watcher.commandMode = newValue }
     }
 
     private var watcher = FnWatcher()
@@ -50,23 +57,32 @@ final class FnKeyMonitor {
         return true
     }
 
-    fileprivate func handle(type: CGEventType, keyCode: Int64, fnHeld: Bool, time: TimeInterval) {
+    /// Returns true when Murmur used the key itself, so it isn't passed on (Control-Command-V).
+    fileprivate func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags, time: TimeInterval) -> Bool {
+        let fnHeld = flags.contains(.maskSecondaryFn)
         let event: KeyEvent
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             // macOS switches a slow tap off; switch it back on.
             log.notice("macOS switched the keyboard watch off; switching it back on")
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
-            return
+            return false
         case .flagsChanged:
-            event = .modifiersChanged(keyCode: keyCode, fnHeld: fnHeld)
+            event = .modifiersChanged(keyCode: keyCode, fnHeld: fnHeld, controlHeld: flags.contains(.maskControl))
             log.notice("Modifier key \(keyCode), Fn held: \(fnHeld)")
         case .keyDown:
+            if Shortcuts.isPasteAgain(
+                keyCode: keyCode, command: flags.contains(.maskCommand), control: flags.contains(.maskControl),
+                option: flags.contains(.maskAlternate), shift: flags.contains(.maskShift)) {
+                log.notice("Paste again shortcut")
+                onPasteAgain()
+                return true
+            }
             event = .keyDown(keyCode: keyCode)
             // Logged only while Fn is held (Fn's own codes, Fn+arrow), never ordinary typing.
             if fnHeld || FnWatcher.fnKeyCodes.contains(keyCode) { log.notice("Key \(keyCode) pressed with Fn") }
         default:
-            return
+            return false
         }
 
         let wasDown = watcher.fnIsDown
@@ -79,6 +95,7 @@ final class FnKeyMonitor {
                 self.react(to: self.watcher.tick(at: ProcessInfo.processInfo.systemUptime))
             }
         }
+        return false
     }
 
     private func react(to outcome: FnWatcher.Outcome) {
@@ -91,6 +108,9 @@ final class FnKeyMonitor {
         case .holdStarted:
             log.notice("Fn held")
             onHoldStarted()
+        case .commandHoldStarted:
+            log.notice("Fn and Control held: Command Mode")
+            onCommandHoldStarted()
         case .holdEnded:
             log.notice("Fn let go")
             onHoldEnded()
@@ -107,15 +127,18 @@ final class FnKeyMonitor {
 private func fnTapCallback(
     proxy: CGEventTapProxy, type: CGEventType, event: CGEvent, refcon: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
+    // Murmur's own key presses (Command-V, Command-C, Return) go straight through.
+    if event.getIntegerValueField(.eventSourceUserData) == Paster.ownKeyTag { return Unmanaged.passUnretained(event) }
     if let refcon {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-        let fnHeld = event.flags.contains(.maskSecondaryFn)
+        let flags = event.flags
         // Not event.timestamp: on Apple silicon it counts clock ticks, not nanoseconds.
         let time = ProcessInfo.processInfo.systemUptime
         let monitor = Unmanaged<FnKeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
-        MainActor.assumeIsolated {
-            monitor.handle(type: type, keyCode: keyCode, fnHeld: fnHeld, time: time)
+        let used = MainActor.assumeIsolated {
+            monitor.handle(type: type, keyCode: keyCode, flags: flags, time: time)
         }
+        if used { return nil }
     }
     return Unmanaged.passUnretained(event)
 }

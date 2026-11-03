@@ -1,5 +1,6 @@
 import FluidAudio
 import Foundation
+import MurmurCore
 
 /// Turns recorded samples into text with a Parakeet model, on this device.
 ///
@@ -18,6 +19,16 @@ public actor Transcriber {
 
     /// Samples are mono at `sampleRate`; they are resampled to the 16 kHz the model needs.
     public func transcribe(_ samples: [Float], sampleRate: Double, model: SpeechModel) async throws -> String {
+        try await result(samples, sampleRate: sampleRate, model: model).text
+    }
+
+    /// For Type as I speak: each word heard, with when it was said (seconds from the start of `samples`).
+    public func words(_ samples: [Float], sampleRate: Double, model: SpeechModel) async throws -> [HeardWord] {
+        let timings = try await result(samples, sampleRate: sampleRate, model: model).tokenTimings ?? []
+        return buildWordTimings(from: timings).map { HeardWord($0.word, start: $0.startTime, end: $0.endTime) }
+    }
+
+    private func result(_ samples: [Float], sampleRate: Double, model: SpeechModel) async throws -> ASRResult {
         let manager = try await manager(for: model)
         var audio = try AudioConverter().resample(samples, from: sampleRate)
 
@@ -25,7 +36,7 @@ public actor Transcriber {
         if audio.count < 16_000 { audio += [Float](repeating: 0, count: 16_000 - audio.count) }
 
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-        return try await manager.transcribe(audio, decoderState: &state).text
+        return try await manager.transcribe(audio, decoderState: &state)
     }
 
     /// For test mode: reads a sound file as mono 16 kHz samples.

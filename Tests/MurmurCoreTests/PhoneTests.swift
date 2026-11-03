@@ -222,6 +222,14 @@ struct LinkStoreTests {
         return LinkStore(folder: folder)
     }
 
+    @Test func theLastDictationIsKeptForTheAgainKey() throws {
+        let store = try store()
+        #expect(store.last() == nil)
+        store.saveLast("Hello there.")
+        store.saveLast("See you at six.")
+        #expect(store.last() == "See you at six.")
+    }
+
     @Test func statusAndRequestRoundTrip() throws {
         let store = try store()
         #expect(store.status() == nil)
@@ -262,5 +270,68 @@ struct LinkStoreTests {
         let keyboard = try String(contentsOf: store.folder.appending(path: "trace-keyboard.txt"), encoding: .utf8)
         #expect(keyboard.contains("sent start"))
         #expect(!keyboard.contains("started listening"))
+    }
+}
+
+@Suite("9.7 Command Mode from the keyboard")
+struct KeyboardCommandTests {
+    @Test func sparklesShowsOnlyWhenADictationCouldStartAndAppleIntelligenceIsOn() {
+        #expect(KeyboardLink.showsCommand(in: .ready(preparing: nil), ai: true))
+        #expect(KeyboardLink.showsCommand(in: .ready(preparing: 40), ai: true))
+        #expect(!KeyboardLink.showsCommand(in: .ready(preparing: nil), ai: false))
+        #expect(!KeyboardLink.showsCommand(in: .needsApp, ai: true))
+        #expect(!KeyboardLink.showsCommand(in: .listening, ai: true))
+        #expect(!KeyboardLink.showsCommand(in: .writing(preparing: nil), ai: true))
+    }
+
+    @Test func aCommandStartsARecordingLikeTalk() {
+        var flow = DictationFlow()
+        #expect(flow.handle(.command) == .startRecording)
+        #expect(flow.handle(.command) == .nothing)
+        #expect(flow.handle(.stop) == .stopAndTranscribe)
+    }
+
+    @Test func theKeyboardThatAskedTypesTheAnswerOverTheSelection() {
+        var wait = KeyboardWait()
+        wait.sent(KeyboardRequest(id: 7, kind: .command, selection: "send it friday"), recording: nil)
+        #expect(wait.deliver(PhoneResult(id: 7, text: "Could you send it on Friday?", replacesSelection: true))
+            == .replace("Could you send it on Friday?"))
+        #expect(wait.deliver(PhoneResult(id: 7, text: "Again", replacesSelection: true)) == .nothing)
+    }
+
+    @Test func withNothingSelectedTheAnswerIsTypedLikeADictation() {
+        var wait = KeyboardWait()
+        wait.sent(KeyboardRequest(id: 8, kind: .command), recording: nil)
+        #expect(wait.deliver(PhoneResult(id: 8, text: "No thanks, I'll pass.")) == .type("No thanks, I'll pass.", pressEnter: false))
+    }
+
+    @Test func aProblemIsShownNotTyped() {
+        var wait = KeyboardWait()
+        wait.sent(KeyboardRequest(id: 9, kind: .command), recording: nil)
+        #expect(wait.deliver(PhoneResult(id: 9, text: "", problem: "Apple Intelligence is busy. Try again in a moment."))
+            == .note("Apple Intelligence is busy. Try again in a moment."))
+    }
+
+    @Test func undoPutsTheSelectedTextBack() {
+        var last = LastTyped()
+        last.typed("Could you send it on Friday?", replacing: "send it friday")
+        #expect(last.undo(before: "Hi. Could you send it on Friday?")
+            == LastTyped.Undo(delete: 28, retype: "send it friday"))
+        #expect(last.undo(before: "Hi. Could you send it on Friday?") == nil)
+    }
+
+    @Test func anOrdinaryDictationAfterACommandHasNothingToPutBack() {
+        var last = LastTyped()
+        last.typed("Better.", replacing: "worse")
+        last.typed("Hello. ")
+        #expect(last.undo(before: "Hello. ") == LastTyped.Undo(delete: 7, retype: ""))
+    }
+
+    @Test func requestsAndResultsSurviveTheSharedFile() throws {
+        let request = KeyboardRequest(id: 1, kind: .command, casual: false, selection: "hi")
+        #expect(try JSONDecoder().decode(KeyboardRequest.self, from: JSONEncoder().encode(request)) == request)
+        // Files written by the last version, without the new fields, still read.
+        let old = #"{"id":2,"kind":"start"}"#
+        #expect(try JSONDecoder().decode(KeyboardRequest.self, from: Data(old.utf8)).selection == nil)
     }
 }

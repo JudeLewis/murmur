@@ -11,6 +11,9 @@ public enum KeyboardRequestKind: String, Codable, Sendable {
     case cancel
     /// The keyboard's "turn mic off" button: end the session now.
     case turnOff
+    /// The keyboard's ✨ button: listen for an instruction for Apple
+    /// Intelligence about the selected text (Command Mode, SPEC.md 9.7).
+    case command
 }
 
 public struct KeyboardRequest: Codable, Equatable, Sendable {
@@ -19,11 +22,14 @@ public struct KeyboardRequest: Codable, Equatable, Sendable {
     public var kind: KeyboardRequestKind
     /// The keyboard's casual switch (no capital at the start, no full stop at the end).
     public var casual: Bool?
+    /// Command Mode: the text selected when ✨ was tapped, if any.
+    public var selection: String?
 
-    public init(id: Int, kind: KeyboardRequestKind, casual: Bool? = nil) {
+    public init(id: Int, kind: KeyboardRequestKind, casual: Bool? = nil, selection: String? = nil) {
         self.id = id
         self.kind = kind
         self.casual = casual
+        self.selection = selection
     }
 
     public static func newID(at date: Date = .now) -> Int {
@@ -41,12 +47,15 @@ public struct PhoneResult: Codable, Equatable, Sendable {
     public var problem: String?
     /// "press enter" was said at the end: type a Return after the text.
     public var pressEnter: Bool?
+    /// Command Mode's answer: it goes in place of the selected text, as it is.
+    public var replacesSelection: Bool?
 
-    public init(id: Int, text: String, problem: String? = nil, pressEnter: Bool? = nil) {
+    public init(id: Int, text: String, problem: String? = nil, pressEnter: Bool? = nil, replacesSelection: Bool? = nil) {
         self.id = id
         self.text = text
         self.problem = problem
         self.pressEnter = pressEnter
+        self.replacesSelection = replacesSelection
     }
 }
 
@@ -65,6 +74,10 @@ public struct PhoneStatus: Codable, Equatable, Sendable {
     public var result: PhoneResult?
     /// How loud the microphone is while listening, 0 to about 1, for the keyboard's bars.
     public var level: Float?
+    /// The recording being made or written is a Command Mode instruction.
+    public var command: Bool?
+    /// Apple Intelligence is on, so the keyboard shows ✨.
+    public var ai: Bool?
 
     public init() {}
 }
@@ -122,6 +135,12 @@ public enum KeyboardLink {
         return false
     }
 
+    /// ✨ shows next to the mic when a dictation could start and Apple Intelligence is on.
+    public static func showsCommand(in state: KeyboardState, ai: Bool) -> Bool {
+        guard ai, case .ready = state else { return false }
+        return true
+    }
+
     /// The model can still be getting ready: the recording waits for it, as on the Mac.
     public static func tap(in state: KeyboardState) -> Tap {
         switch state {
@@ -134,6 +153,8 @@ public enum KeyboardLink {
 
     public enum Delivery: Equatable, Sendable {
         case type(String, pressEnter: Bool)
+        /// Command Mode's answer, typed over the selection as it is.
+        case replace(String)
         case note(String)
         case nothing
     }
@@ -144,6 +165,7 @@ public enum KeyboardLink {
         if let problem = result.problem { return .note(problem) }
         let pressEnter = result.pressEnter ?? false
         if result.text.isEmpty && !pressEnter { return .note("Didn't catch that.") }
+        if result.replacesSelection == true { return .replace(result.text) }
         return .type(result.text, pressEnter: pressEnter)
     }
 }
@@ -158,7 +180,7 @@ public struct KeyboardWait: Equatable, Sendable {
     /// closed and opened again while listening still types the text.
     public mutating func sent(_ request: KeyboardRequest, recording: Int?) {
         switch request.kind {
-        case .start: id = request.id
+        case .start, .command: id = request.id
         case .stop: if let recording, recording != 0 { id = recording }
         case .cancel, .turnOff: id = nil
         }
@@ -176,27 +198,39 @@ public struct KeyboardWait: Equatable, Sendable {
 }
 
 /// The keyboard's Undo: takes the last dictation back out, as long as the
-/// cursor is still straight after it.
+/// cursor is still straight after it. After Command Mode it also puts back
+/// the text that was selected.
 public struct LastTyped: Equatable, Sendable {
     public private(set) var text: String?
+    public private(set) var replaced: String?
+
+    public struct Undo: Equatable, Sendable {
+        /// How many characters to delete.
+        public var delete: Int
+        /// What to type back in their place.
+        public var retype: String
+    }
 
     public init() {}
 
-    public mutating func typed(_ text: String) {
+    public mutating func typed(_ text: String, replacing: String? = nil) {
         self.text = text.isEmpty ? nil : text
+        replaced = text.isEmpty ? nil : replacing
     }
 
-    /// How many characters to delete, or nil if the text before the cursor
-    /// doesn't end with the dictation (the cursor moved, or it was edited).
-    /// iOS often shows a keyboard only the current line or a short tail, so a
-    /// tail of at least a few characters that ends the dictation counts too.
-    public mutating func undo(before: String?) -> Int? {
+    /// Nil if the text before the cursor doesn't end with the dictation (the
+    /// cursor moved, or it was edited). iOS often shows a keyboard only the
+    /// current line or a short tail, so a tail of at least a few characters
+    /// that ends the dictation counts too.
+    public mutating func undo(before: String?) -> Undo? {
         guard let text, let before else { return nil }
         let fullyVisible = before.hasSuffix(text)
         let tailVisible = before.count >= 4 && !before.contains("\n") && text.hasSuffix(before)
         guard fullyVisible || tailVisible else { return nil }
+        let undo = Undo(delete: text.count, retype: replaced ?? "")
         self.text = nil
-        return text.count
+        replaced = nil
+        return undo
     }
 }
 

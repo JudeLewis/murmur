@@ -53,6 +53,8 @@ struct ContentView: View {
                 Section("Settings") {
                     Toggle("Tidy speech (drops um and er)", isOn: $murmur.tidy)
                     Toggle("British spelling", isOn: $murmur.british)
+                    Toggle("Fix \u{201C}no wait, I mean\u{201D} (Apple Intelligence)", isOn: $murmur.fixCorrections)
+                    Toggle("Whisper mode (for speaking quietly)", isOn: $murmur.whisper)
                     NavigationLink("Word list and snippets") {
                         WordsView(model: murmur.words)
                             .navigationTitle("Word list and snippets")

@@ -14,6 +14,10 @@ enum Settings {
             "sounds": true,
             "holdToTalk": true,
             "duckMusic": true,
+            "commandMode": true,
+            "fixCorrections": true,
+            "typeAsISpeak": true,
+            "whisperMode": false,
             // Messages and WhatsApp start in casual style (SPEC.md 4.7).
             "casualApps": ["com.apple.MobileSMS", "net.whatsapp.WhatsApp"],
         ])
@@ -37,6 +41,35 @@ enum Settings {
     static var holdToTalk: Bool {
         get { defaults.bool(forKey: "holdToTalk") }
         set { defaults.set(newValue, forKey: "holdToTalk") }
+    }
+
+    static var commandMode: Bool {
+        get { defaults.bool(forKey: "commandMode") }
+        set { defaults.set(newValue, forKey: "commandMode") }
+    }
+
+    /// Fix "no wait, I mean" with the on-device AI (SPEC.md 4.8).
+    static var fixCorrections: Bool {
+        get { defaults.bool(forKey: "fixCorrections") }
+        set { defaults.set(newValue, forKey: "fixCorrections") }
+    }
+
+    /// Type the words while you talk, not all at the end (SPEC.md 2.9).
+    static var typeAsISpeak: Bool {
+        get { defaults.bool(forKey: "typeAsISpeak") }
+        set { defaults.set(newValue, forKey: "typeAsISpeak") }
+    }
+
+    /// Boost quiet recordings (SPEC.md 3.4).
+    static var whisperMode: Bool {
+        get { defaults.bool(forKey: "whisperMode") }
+        set { defaults.set(newValue, forKey: "whisperMode") }
+    }
+
+    /// The chosen microphone's id; nil for Automatic (SPEC.md 3.3).
+    static var microphoneUID: String? {
+        get { defaults.string(forKey: "microphoneUID") }
+        set { defaults.set(newValue, forKey: "microphoneUID") }
     }
 
     static var duckMusic: Bool {

@@ -272,14 +272,14 @@ struct KeyboardExtrasTests {
     @Test func undoTakesTheLastDictationBackOut() {
         var last = LastTyped()
         last.typed("Hello there. ")
-        #expect(last.undo(before: "Hi. Hello there. ") == 13)
+        #expect(last.undo(before: "Hi. Hello there. ") == LastTyped.Undo(delete: 13, retype: ""))
         #expect(last.undo(before: "Hi. Hello there. ") == nil)
     }
 
     @Test func undoWorksWhenIOSShowsOnlyTheEnd() {
         var last = LastTyped()
         last.typed("Hi Sam\nSee you at six. ")
-        #expect(last.undo(before: "See you at six. ") == 23)
+        #expect(last.undo(before: "See you at six. ")?.delete == 23)
         last.typed("Hello there. ")
         #expect(last.undo(before: ". ") == nil)
     }

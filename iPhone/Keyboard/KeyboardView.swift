@@ -44,6 +44,10 @@ struct KeyboardView: View {
                             .buttonStyle(KeyStyle(special: true))
                             .frame(width: 46)
                     }
+                    Button { talker.typeAgain() } label: { Label("again", systemImage: "arrow.clockwise").font(.system(size: 15)) }
+                        .buttonStyle(KeyStyle(special: true))
+                        .frame(width: 84)
+                        .accessibilityLabel("Type the last dictation again")
                     Button("space") { talker.space() }.buttonStyle(KeyStyle())
                     Button("return") { talker.newLine() }.buttonStyle(KeyStyle(special: true)).frame(width: 92)
                 }
@@ -60,13 +64,19 @@ struct KeyboardView: View {
         case .listening:
             HStack(spacing: 12) {
                 roundButton("xmark", colour: Color(.systemGray3), label: "Throw away") { talker.cancel() }
+                if talker.isCommand {
+                    Label("Say what to do", systemImage: "sparkles")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.tint)
+                        .fixedSize()
+                }
                 Bars(levels: talker.levels.levels)
                 roundButton("checkmark", colour: .accentColor, label: "Finish") { talker.talk() }
             }
         case .writing:
             HStack(spacing: 10) {
                 ProgressView()
-                Text(talker.note ?? writingLine).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                Text(talker.note ?? (talker.isCommand ? "Thinking" : writingLine)).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                 Spacer()
             }
             .padding(.leading, 6)
@@ -97,6 +107,17 @@ struct KeyboardView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Turn the microphone off")
+                }
+                if talker.showsCommand {
+                    Button { talker.command() } label: {
+                        Image(systemName: "sparkles")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.tint)
+                            .frame(width: 40, height: 40)
+                            .background(Color.accentColor.opacity(0.15), in: .circle)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Command Mode: say what to do with the selected text")
                 }
                 if talker.state != .needsFullAccess { micButton }
             }

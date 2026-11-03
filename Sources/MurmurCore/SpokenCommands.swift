@@ -72,7 +72,26 @@ extension Tidy {
     public static func dictation(
         _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false
     ) -> Dictation {
-        let (text, pressEnter) = SpokenCommands.pressEnter(in: finish(raw, words: words, british: british))
+        dictation(finished: finish(raw, words: words, british: british), words: words, snippets: snippets, british: british, casual: casual)
+    }
+
+    /// The same, with the "no wait, I mean" fix (SPEC.md 4.8) after British
+    /// spelling and the word list and before everything else. `fix` asks the
+    /// on-device AI and returns the fixed text, or nil to keep it as it is.
+    public static func dictation(
+        _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
+        fix: @Sendable (String) async -> String?
+    ) async -> Dictation {
+        var finished = finish(raw, words: words, british: british)
+        if let fixed = await fix(finished) { finished = fixed }
+        return dictation(finished: finished, words: words, snippets: snippets, british: british, casual: casual)
+    }
+
+    /// The same, for text that has already been through `finish`.
+    public static func dictation(
+        finished: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false
+    ) -> Dictation {
+        let (text, pressEnter) = SpokenCommands.pressEnter(in: finished)
         var result = SpokenCommands.lineBreaks(in: text)
         if casual { result = Tidy.casual(result, keeping: words) }
         // Triggers get the same spelling changes as the text, so "my favorite color" still matches.

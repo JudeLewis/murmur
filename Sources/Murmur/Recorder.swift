@@ -8,7 +8,13 @@ import os
 final class Recorder {
     enum RecorderError: LocalizedError {
         case noMicrophone
-        var errorDescription: String? { "No microphone found." }
+        case couldNotUseDevice
+        var errorDescription: String? {
+            switch self {
+            case .noMicrophone: "No microphone found."
+            case .couldNotUseDevice: "Couldn't use the chosen microphone."
+            }
+        }
     }
 
     private struct Captured {
@@ -22,9 +28,17 @@ final class Recorder {
 
     /// Starts listening straight away. A fresh recorder is made for each
     /// dictation, so a microphone plugged in since last time is picked up.
-    init() throws {
+    /// `device` is the microphone to use; nil means the Mac's default input.
+    init(device: AudioDeviceID? = nil) throws {
         let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
+        if var device {
+            guard let unit = input.audioUnit, AudioUnitSetProperty(
+                unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+                &device, UInt32(MemoryLayout<AudioDeviceID>.size)) == noErr else { throw RecorderError.couldNotUseDevice }
+        }
+        // A chosen mic: the tap takes that mic's own format (AirPods run at a different
+        // rate from the built-in mic), since a tap whose rate differs from the mic's crashes.
+        let format = device == nil ? input.outputFormat(forBus: 0) : input.inputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw RecorderError.noMicrophone }
         sampleRate = format.sampleRate
 
@@ -41,6 +55,25 @@ final class Recorder {
 
     /// Loudness of the last few milliseconds, 0 to about 1, for the pill's bars.
     var level: Float { captured.withLock { $0.level } }
+
+    /// For Type as I speak: what's been heard from `second` on (only that part
+    /// is copied), and how many seconds have been heard in all.
+    func heard(from second: Double) -> (samples: [Float], until: Double) {
+        let rate = sampleRate
+        return captured.withLock { captured in
+            let start = min(captured.samples.count, max(0, Int(second * rate)))
+            return (Array(captured.samples[start...]), Double(captured.samples.count) / rate)
+        }
+    }
+
+    /// Stops the microphone without copying what was heard (Type as I speak
+    /// reads only what it needs); hands back how many seconds were heard.
+    func stopListening() -> Double {
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        let rate = sampleRate
+        return captured.withLock { Double($0.samples.count) / rate }
+    }
 
     /// Stops the microphone and hands back everything heard.
     func stop() -> [Float] {

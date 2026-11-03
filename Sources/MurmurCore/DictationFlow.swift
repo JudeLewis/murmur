@@ -77,7 +77,7 @@ public struct DictationFlow: Sendable {
     /// toggle, so a keyboard showing an old state can't stop what it meant to start.
     public mutating func handle(_ request: KeyboardRequestKind) -> DictationAction {
         switch (request, phase) {
-        case (.start, .idle), (.stop, .recording): toggle()
+        case (.start, .idle), (.command, .idle), (.stop, .recording): toggle()
         case (.cancel, _): cancel()
         default: .nothing
         }

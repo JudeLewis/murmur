@@ -16,6 +16,13 @@ public struct LinkStore: Sendable {
     public func request() -> KeyboardRequest? { read("request.json") }
     public func save(_ request: KeyboardRequest) { write(request, to: "request.json") }
 
+    /// The last dictation, for the keyboard's "again" key. Written once per
+    /// dictation, not with every status, since it can be long.
+    public func last() -> String? { try? String(contentsOf: folder.appending(path: "last.txt"), encoding: .utf8) }
+    public func saveLast(_ text: String) {
+        try? text.write(to: folder.appending(path: "last.txt"), atomically: true, encoding: .utf8)
+    }
+
     /// Adds a line to trace-<who>.txt, keeping the last `Trace.limit` lines.
     public func trace(_ event: String, from who: String, at date: Date = .now) {
         let url = folder.appending(path: "trace-\(who).txt")
