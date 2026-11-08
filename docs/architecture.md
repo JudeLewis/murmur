@@ -142,13 +142,25 @@ Jude asked for the "no wait" fix, Whisper mode, paste again and Command Mode on 
 
 Jude asked for the words to appear while talking, not at the end, and picked "type words as they settle" over words in the pill only or a different, live-only model (NVIDIA Nemotron, which keeps "um" and needs 600 MB more).
 
-- **Same model, read again each second.** LiveTyper reads the audio from 5 seconds before the settled words to now; LiveTranscript (MurmurCore) settles a word once two readings in a row agree on it, using FluidAudio's word timings. A reading takes about 60 ms on Jude's M3, so the text runs a second or two behind. FluidAudio's own SlidingWindowAsrManager was no good for this: it only confirms text after about 10 seconds.
-- **Words from the context part are dropped by time** (most of the word before the settled end), and the last settled word heard again a little later is dropped by spelling: on 3 Nov 2026 "part" came out twice without that. A word ending in the last 0.3 s waits, as it may be cut off.
-- **The last reading gets 0.6 s of silence after it**: without it the last sentence lost its question mark and a capital. With it (and 5 s of context), both test recordings came out exactly as reading them all at once (`Murmur --live`).
-- **The whole order runs on the settled text each time**, and LiveEdit types only the difference: usually just new words; a few deletions when a snippet, a two-word fix or casual style changes the end. Over 300 characters to delete means something is wrong (the cursor moved), so it stops and copies the dictation.
+- **Same model, whole recording read again each second (changed 8 Nov 2026).** The first version read only the last few seconds and froze words once two readings agreed. Jude found it mishearing words and putting full stops mid-sentence. On 8 test recordings with pauses (217 words, Mac voices, `Murmur --live`) it made 4 word mistakes and 2 stray full stops; reading the whole recording made none. A model reading a cut-off piece guesses that the sentence has ended, and joins between pieces doubled words. A smaller patch (holding back the last word's punctuation, still in pieces) changed nothing. Now every reading covers the whole recording, the same 8 recordings come out the same as reading it all at once, and what's typed is corrected when a reading says better. FluidAudio's own SlidingWindowAsrManager was no good for this: it only confirms text after about 10 seconds.
+- **Cost grows with length, and the wait grows with it.** A reading took 0.5 s at 1 minute and 2.6 s at 4 minutes (debug build). The loop waits a second after each reading, so a very long dictation just updates less often; there's no second system to keep in step for long recordings.
+- **New words wait for two readings to agree; words on screen take each reading's version.** A word ending in the last 0.3 s waits, as it may be cut off.
+- **Punctuation on the last word is held back** until the next word arrives or you stop, since the model guesses a full stop at every pause. If the cursor may have moved, the held-back mark is put back, as that only adds characters.
+- **Commas once typed stay until the last reading.** They flip between readings, and each flip retyped everything after it (54 of 235 readings on a 4-minute test, 8 after this).
+- **Only the last 250 characters can change**, so a correction never deletes more than that. Older words are locked, and words before the locked end are dropped by time, with the last locked word heard again a little later dropped by spelling.
+- **A click, a key press or another app in front stops corrections.** Murmur's event tap also watches mouse clicks for this. What's typed is locked, and LiveEdit.isSafe refuses to delete into it; if a change would need that, typing stops and the dictation is copied.
+- **A reading with under half the words on screen is ignored** as a bad reading.
+- **The last reading gets 0.6 s of silence after it**: without it the last sentence can lose its question mark and a capital.
+- **The whole order runs on the words on screen each time**, and LiveEdit types only the difference: usually just new words; a few deletions when a correction, a snippet, a two-word fix or casual style changes the end. Over 300 characters to delete means something is wrong (the cursor moved), so it stops and copies the dictation.
 - **Typed with key presses (unicode key events), not the clipboard**, whole characters at a time. Line breaks are pasted, since a typed Return sends messages; the clipboard is put back once at the end, so two pastes close together can't lose it.
 - **While Fn is held, deleting waits**: Fn and Delete is forward delete.
 - **No "no wait" fix while it's on**: the words are already typed. Command Mode still answers at the end.
+
+## Spoken punctuation and stray full stops (added 8 Nov 2026)
+
+- **Fixed rules, in MurmurCore** (SpokenPunctuation, StrayStops), so they're instant, work on the iPhone too and run on every live reading. Stray stops are removed first, so a full stop you said yourself is never taken out.
+- **Only "exclamation" allows a guessed comma inside the phrase**: "The car park was full. Stop by later" must not become a spoken full stop.
+- **"Ellipsis" as well as "dot dot dot"**: Bark 3.0 Clean throws away repeated words, so "dot dot dot" often arrives as "dot" or nothing (seen 8 Nov 2026).
 
 ## Knowing what you're writing (added 3 Nov 2026)
 

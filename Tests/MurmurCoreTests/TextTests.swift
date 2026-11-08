@@ -119,3 +119,101 @@ struct RecentListTests {
         #expect(recent.items == ["four", "three", "two"])
     }
 }
+
+@Suite("4.6 Spoken commands: punctuation")
+struct SpokenPunctuationTests {
+    private func written(_ said: String) -> String { Tidy.dictation(said, words: [], british: true).text }
+
+    @Test func eachMarkComesOutAsItsSymbol() {
+        #expect(written("Are you coming question mark") == "Are you coming?")
+        #expect(written("What a day exclamation mark") == "What a day!")
+        #expect(written("What a day exclamation point") == "What a day!")
+        #expect(written("We are done full stop") == "We are done.")
+        #expect(written("Apples comma pears and plums") == "Apples, pears and plums")
+        #expect(written("Bring these colon a pen and paper") == "Bring these: a pen and paper")
+        #expect(written("It rained semicolon we stayed in") == "It rained; we stayed in")
+        #expect(written("It rained semi colon we stayed in") == "It rained; we stayed in")
+        #expect(written("Well dot dot dot maybe") == "Well... maybe")
+        #expect(written("Well ellipsis maybe") == "Well... maybe")
+        #expect(written("Do you like this question mark") == "Do you like this?")
+        #expect(written("I said no full stop") == "I said no.")
+    }
+
+    @Test func theModelsOwnGuessesAroundTheWordsGo() {
+        #expect(written("Are you coming? Question mark.") == "Are you coming?")
+        #expect(written("It works, comma and it's quick.") == "It works, and it's quick.")
+        #expect(written("We're done full stop. Can we go?") == "We're done. Can we go?")
+        #expect(written("Well, dot, dot, dot.") == "Well...")
+        #expect(written("That would be great exclamation, Mark.") == "That would be great!")
+    }
+
+    @Test func aNewSentenceGetsACapital() {
+        #expect(written("We're done full stop can we go") == "We're done. Can we go")
+        #expect(written("Are you in question mark we are") == "Are you in? We are")
+        #expect(written("I got an email full stop iPhone next") == "I got an email. iPhone next")
+    }
+
+    @Test func aCapitalTheModelGuessedAfterACommaGoes() {
+        #expect(written("I went home comma. And then I slept") == "I went home, and then I slept")
+        #expect(written("Hello comma. Sam") == "Hello, Sam")
+    }
+
+    @Test func twoInARowAreBothKept() {
+        #expect(written("You did what question mark exclamation mark") == "You did what?!")
+    }
+
+    @Test func talkingAboutPunctuationStaysAsSaid() {
+        #expect(written("There's a question mark over it") == "There's a question mark over it")
+        #expect(written("It came to a full stop") == "It came to a full stop")
+        #expect(written("Use the Oxford comma here") == "Use the Oxford comma here")
+        #expect(written("That's a big question mark") == "That's a big question mark")
+        #expect(written("It tests for colon cancer") == "It tests for colon cancer")
+        #expect(written("The commando stood still") == "The commando stood still")
+        #expect(written("The car park was full. Stop by later") == "The car park was full. Stop by later")
+        #expect(written("Good question. Mark is right") == "Good question. Mark is right")
+    }
+
+    @Test func worksWithTheOtherSpokenCommands() {
+        let sent = Tidy.dictation("Are you in question mark press enter", words: [], british: true)
+        #expect(sent.text == "Are you in?")
+        #expect(sent.pressEnter)
+        #expect(written("Hello comma new line how are you question mark") == "Hello,\nHow are you?")
+    }
+}
+
+@Suite("4.3 Tidying: stray full stops")
+struct StrayStopsTests {
+    @Test func aFullStopBeforeASmallLetterGoes() {
+        #expect(StrayStops.remove(from: "I just haven't. worked yet.") == "I just haven't worked yet.")
+        #expect(StrayStops.remove(from: "It covers the. clock as well.") == "It covers the clock as well.")
+    }
+
+    @Test func aFullStopAfterAWordNoSentenceEndsOnGoes() {
+        #expect(StrayStops.remove(from: "Because the. Whole thing moved.") == "Because the whole thing moved.")
+        #expect(StrayStops.remove(from: "Salt and. I like pepper.") == "Salt and I like pepper.")
+    }
+
+    @Test func aNameFromTheWordListKeepsItsCapital() {
+        let names = [WordEntry(heard: "sam", written: "Sam")]
+        #expect(StrayStops.remove(from: "Salt and. Sam likes it.", keeping: names) == "Salt and Sam likes it.")
+    }
+
+    @Test func realSentencesStay() {
+        #expect(StrayStops.remove(from: "That was fun. We should go.") == "That was fun. We should go.")
+        #expect(StrayStops.remove(from: "Plan A. Then plan B.") == "Plan A. Then plan B.")
+    }
+
+    @Test func abbreviationsAndTheLikeStay() {
+        for text in ["Fruit, e.g. apples", "At 9 a.m. on Monday", "Pens, etc. and so on", "Ask Mr. smith", "Wait... what", "See google.com for more", "It went. iPhone next"] {
+            #expect(StrayStops.remove(from: text) == text)
+        }
+    }
+
+    @Test func aFullStopInFrontOfASpokenCommandStays() {
+        #expect(Tidy.dictation("Hi Sam. new line. See you.", words: [], british: true).text == "Hi Sam.\nSee you.")
+    }
+
+    @Test func aFullStopYouSaidIsKept() {
+        #expect(Tidy.dictation("Bread and full stop then milk", words: [], british: true).text == "Bread and. Then milk")
+    }
+}

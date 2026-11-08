@@ -28,8 +28,8 @@ How Jude likes to work with Claude on Murmur. Read this before replying. It matc
 2. **Build with tests.** Logic in MurmurCore with tests in the same change. Suite names start with their SPEC.md section.
 3. **Review.** At the end of each piece of work, run /code-review and fix what it finds.
 4. **Install.** Run `./scripts/install.sh` so the copy in Applications is the new one.
-5. **Jude tests** by dictating into real apps.
-6. **Commit.** Claude commits checked work with the pre-commit check passing, without asking each time, and tells Jude the commit hash. Never push. Never commit over failing checks.
+5. **Save to GitHub.** Claude commits and pushes finished work as soon as the pre-commit check passes, without asking (Jude's standing word, 8 Nov 2026), and tells Jude the commit hash. Never commit or push over failing checks. The repo is public, so look for private details first.
+6. **Jude tests** by dictating into real apps. Anything that comes up gets fixed in a new commit.
 7. **Keep the docs current, without asking.** In the same turn as any change or decision, update SPEC.md, docs/architecture.md, TODO.md (finished items to archive/) and Claude's memory, and say in one line what changed. Nothing important should live only in the conversation.
 
 ## Keep it light

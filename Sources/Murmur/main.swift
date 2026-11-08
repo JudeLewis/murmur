@@ -44,26 +44,34 @@ if let index = CommandLine.arguments.firstIndex(of: "--live"), index + 1 < Comma
             let samples = try Transcriber.samples(fromFile: url)
             let transcriber = Transcriber()
             let shape = { Tidy.dictation($0, words: Settings.words(), snippets: Settings.snippets, british: Settings.british) }
-            func heard(from start: Double, until: Double, silence: Double = 0) async throws -> [HeardWord] {
-                let part = Array(samples[min(samples.count, Int(start * 16_000))..<min(samples.count, Int(until * 16_000))])
+            func heard(until: Double, silence: Double = 0) async throws -> [HeardWord] {
+                let part = Array(samples[0..<min(samples.count, Int(until * 16_000))])
                     + [Float](repeating: 0, count: Int(silence * 16_000))
                 return try await transcriber.words(part, sampleRate: 16_000, model: .tidy)
-                    .map { HeardWord($0.text, start: $0.start + start, end: $0.end + start) }
             }
             _ = try await transcriber.words(Array(samples.prefix(16_000)), sampleRate: 16_000, model: .tidy)  // warm up
             var live = LiveTranscript()
+            var onScreen = ""
+            var deleted = 0
+            func show(_ target: String) {
+                deleted += LiveEdit.from(onScreen, to: target).delete
+                onScreen = target
+            }
             let length = Double(samples.count) / 16_000
             var now = 1.0
             while now < length {
                 let started = Date.now
-                let words = try await heard(from: live.windowStart, until: now)
-                _ = live.heard(words, now: now)
+                let words = try await heard(until: now)
+                live.heard(words, now: now)
                 let took = Int(Date.now.timeIntervalSince(started) * 1000)
-                print(String(format: "%5.1f s (read %d ms): ", now, took) + shape(live.text).text)
+                show(shape(live.text).text)
+                print(String(format: "%5.1f s (read %d ms): ", now, took) + onScreen)
                 now += 1
             }
-            _ = live.finished(try await heard(from: live.windowStart, until: length, silence: LiveTranscript.endSilence))
-            print("Finished: " + shape(live.text).text)
+            live.finished(try await heard(until: length, silence: LiveTranscript.endSilence))
+            show(shape(live.text).text)
+            print("Corrected: \(deleted) characters deleted and typed again")
+            print("Finished: " + onScreen)
             let whole = try await transcriber.transcribe(samples, sampleRate: 16_000, model: .tidy)
             print("All at once: " + shape(whole).text)
             exit(0)

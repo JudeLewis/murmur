@@ -67,9 +67,9 @@ public struct Dictation: Equatable, Sendable {
 
 extension Tidy {
     /// Everything between the model and the cursor, in order: tidying, British
-    /// spelling and the word list (`finish`), then "press enter", "scratch that",
-    /// line breaks, the email layout, casual style, and last of all snippets, so
-    /// their saved text is never changed.
+    /// spelling and the word list (`finish`), then "press enter", stray full stops,
+    /// spoken punctuation, "scratch that", line breaks, the email layout, casual
+    /// style, and last of all snippets, so their saved text is never changed.
     public static func dictation(
         _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false, email: Bool = false
     ) -> Dictation {
@@ -96,7 +96,9 @@ extension Tidy {
         email: Bool = false
     ) -> Dictation {
         let (text, pressEnter) = SpokenCommands.pressEnter(in: finished)
-        var result = SpokenCommands.lineBreaks(in: ScratchThat.apply(text))
+        // Stray stops first, so a full stop you said yourself is never taken out.
+        let punctuated = SpokenPunctuation.apply(to: StrayStops.remove(from: text, keeping: words))
+        var result = SpokenCommands.lineBreaks(in: ScratchThat.apply(punctuated))
         if email { result = EmailLayout.apply(result) }
         if casual { result = Tidy.casual(result, keeping: words) }
         // Triggers get the same spelling changes as the text, so "my favorite color" still matches.

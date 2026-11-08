@@ -14,6 +14,8 @@ final class FnKeyMonitor {
     var onHoldStarted: () -> Void = {}
     var onCommandHoldStarted: () -> Void = {}
     var onPasteAgain: () -> Void = {}
+    /// A mouse click or a key press of yours: the cursor may be somewhere else now.
+    var onCursorMayMove: () -> Void = {}
     var onHoldEnded: () -> Void = {}
     var onHoldCancelled: () -> Void = {}
     var onSingleTap: () -> Void = {}
@@ -38,6 +40,8 @@ final class FnKeyMonitor {
     func start() -> Bool {
         if tap != nil { return true }
         let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyDown.rawValue)
+            | (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
+            | (1 << CGEventType.otherMouseDown.rawValue)
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
@@ -68,6 +72,9 @@ final class FnKeyMonitor {
             log.notice("macOS switched the keyboard watch off; switching it back on")
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return false
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+            onCursorMayMove()
+            return false
         case .flagsChanged:
             event = .modifiersChanged(keyCode: keyCode, fnHeld: fnHeld, controlHeld: flags.contains(.maskControl))
             log.notice("Modifier key \(keyCode), Fn held: \(fnHeld)")
@@ -80,6 +87,7 @@ final class FnKeyMonitor {
                 return true
             }
             event = .keyDown(keyCode: keyCode)
+            if !FnWatcher.fnKeyCodes.contains(keyCode), keyCode != FnWatcher.escapeKeyCode { onCursorMayMove() }
             // Logged only while Fn is held (Fn's own codes, Fn+arrow), never ordinary typing.
             if fnHeld || FnWatcher.fnKeyCodes.contains(keyCode) { log.notice("Key \(keyCode) pressed with Fn") }
         default:

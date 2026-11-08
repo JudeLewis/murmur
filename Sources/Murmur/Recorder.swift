@@ -63,18 +63,15 @@ final class Recorder {
     /// Loudness of the last few milliseconds, 0 to about 1, for the pill's bars.
     var level: Float { captured.withLock { $0.level } }
 
-    /// For Type as I speak: what's been heard from `second` on (only that part
-    /// is copied), and how many seconds have been heard in all.
-    func heard(from second: Double) -> (samples: [Float], until: Double) {
+    /// For Type as I speak: everything heard so far, and how many seconds that is.
+    func heard() -> (samples: [Float], until: Double) {
         let rate = sampleRate
-        return captured.withLock { captured in
-            let start = min(captured.samples.count, max(0, Int(second * rate)))
-            return (Array(captured.samples[start...]), Double(captured.samples.count) / rate)
-        }
+        // A real copy: handing out the array itself would make the audio thread copy all of it on its next append.
+        return captured.withLock { (Array($0.samples[...]), Double($0.samples.count) / rate) }
     }
 
-    /// Stops the microphone without copying what was heard (Type as I speak
-    /// reads only what it needs); hands back how many seconds were heard.
+    /// Stops the microphone without copying what was heard, for Type as I
+    /// speak; hands back how many seconds were heard.
     func stopListening() -> Double {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()

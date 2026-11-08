@@ -63,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         keys.onSingleTap = { [weak self] in self?.singleTap() }
         keys.onCommandHoldStarted = { [weak self] in self?.commandHoldStarted() }
         keys.onPasteAgain = { [weak self] in self?.pasteAgain() }
+        keys.onCursorMayMove = { [weak self] in self?.liveTyper?.cursorMayHaveMoved() }
         keys.holdToTalk = Settings.holdToTalk
         keys.commandMode = Settings.commandMode
 
@@ -254,7 +255,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let snippets = Settings.snippets
         let british = Settings.british
         // Whether it's an email may only be known a moment after listening starts.
-        liveTyper = LiveTyper(recorder: recorder, transcriber: transcriber, model: Settings.model, whisper: Settings.whisperMode) {
+        liveTyper = LiveTyper(recorder: recorder, transcriber: transcriber, model: Settings.model, whisper: Settings.whisperMode, app: dictatingInto) {
             [weak self] heard in
             let kept = quiet ? QuietVoices.keep(heard) : heard
             return Tidy.dictation(

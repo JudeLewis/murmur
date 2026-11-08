@@ -68,9 +68,12 @@ A recording stops by itself after 15 minutes and is written out as usual.
 ### 2.9 Type as I speak
 
 - "Type as I speak" in Settings, ticked to start with. The words appear where the cursor is while you talk, a second or two behind you, instead of all at once at the end. For double tap and hold Fn; Command Mode still answers at the end.
-- About once a second Murmur reads the last few seconds again with the same speech model (the 5 seconds before what's already typed, for context, plus what's new; the last reading gets a little silence after it, so the last sentence keeps its full stop), and types each word once two readings in a row agree on it. Pausing makes the last words appear. If no words agree for 8 seconds, the ones said more than 2 seconds ago are typed anyway.
-- Everything in 4 still happens to what's typed: British spelling, the word list, snippets, "new line", casual style. When a later word changes how the end should look (a snippet, a two-word fix, casual style's full stop), Murmur deletes the last few characters and types them again.
-- When you stop, the rest is typed with a space after it, and "press enter" presses Return.
+- About once a second Murmur reads the whole recording so far again with the same speech model, so what's typed is as accurate as reading it all at the end. A new word is typed once two readings in a row agree on it (if none agree for 8 seconds, the ones said more than 2 seconds ago are typed anyway). When a later reading is better, Murmur corrects what it has typed: it deletes back to the first difference and types the rest again.
+- Punctuation on the very last word isn't typed until more is said: the model guesses a full stop at any pause. It appears with the next word, or when you stop.
+- Only the last 250 characters or so are ever corrected; older words stay as they are. A comma, once typed, stays until the last reading (which can change the last 250 characters or so), as commas come and go between readings.
+- If you click or press a key while listening, or another app comes to the front, the cursor may have moved, so nothing typed so far is deleted or corrected from then on. New words still appear at the cursor. If a change would need something already typed to be deleted, typing stops and the whole dictation is copied.
+- Everything in 4 still happens to what's typed: British spelling, the word list, snippets, "new line", spoken punctuation, casual style. When a later word changes how the end should look (a snippet, a two-word fix, "question mark", casual style's full stop), Murmur deletes the last few characters and types them again.
+- When you stop, the whole recording is read once more, what's typed is made to match (the last 250 characters or so), a space goes after it, and "press enter" presses Return.
 - The "no wait, I mean" fix (4.8) isn't used while this is on: those words are already typed.
 - Escape stops listening and leaves what's already typed. The pill says "Stopped. What's typed stays." (or "Cancelled" if nothing was typed yet).
 - Murmur types with key presses rather than the clipboard. Text with a line break in it is pasted instead, since a typed line break would send a message; the clipboard is put back once, at the end. While Fn is held (Hold Fn to talk), a correction that needs deleting waits until Fn is let go, since Fn and Delete deletes forwards, and so does what comes after it.
@@ -132,6 +135,7 @@ On by default. Turns American spellings into British ones from a fixed list (col
 - Extra spaces and line breaks are squeezed to single spaces.
 - A recording of silence (nothing, or only punctuation) pastes nothing; the pill says "Didn't catch that."
 - The first letter becomes a capital, unless the first word already has a capital inside it (iPhone).
+- A full stop that can't be real goes: one before a small letter ("I haven't. worked"), or after a word no sentence ends on: a, an, the, and, but, or, my, your, our, their ("the. Whole" becomes "the whole"). Abbreviations and initials stay (e.g., a.m., Mr., U.S.), as do full stops before a spoken command.
 - A space is added after each dictation so the next one doesn't run on.
 
 ### 4.4 Pasting
@@ -152,6 +156,8 @@ On by default. Turns American spellings into British ones from a fixed list (col
 
 ### 4.6 Spoken commands
 
+- Say "question mark", "exclamation mark" (or "exclamation point"), "full stop", "comma", "colon", "semicolon", or "ellipsis" or "dot dot dot" to get ? ! . , : ; or ... (the speech model throws away repeated words, so "dot dot dot" can get lost; "ellipsis" is safer). Any punctuation the model guessed around those words goes, and the next word gets a capital after ? ! or . Two in a row are both kept ("?!").
+- Words about punctuation stay as said: after a, an, the, my, your, our, their, its, big, huge, massive, giant, Oxford, serial, inverted or double ("a question mark over it"), or before cancer, splice, separated, key or button ("colon cancer"). "Do you like this question mark" means the symbol.
 - "New line" starts a new line and "new paragraph" leaves a blank line. Punctuation the model put after the command goes, and the next word gets a capital (not iPhone or eBay).
 - Only at the edge of a phrase: with punctuation, or the start or end of the dictation, on one side ("Hello. New line. How are you?"). "A new line of shoes" is written as said. Pausing slightly before and after the command helps the model add that punctuation.
 - "Press enter" (or "press return") at the very end of a dictation is not written: Murmur presses Return after the text, to send a message. Said on its own, it just presses Return. On iPhone it types a Return, which sends in apps where Return sends.
