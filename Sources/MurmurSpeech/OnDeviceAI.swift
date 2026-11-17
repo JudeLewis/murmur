@@ -1,3 +1,4 @@
+import Foundation
 import FoundationModels
 import MurmurCore
 
@@ -47,11 +48,64 @@ public enum OnDeviceAI {
         return fixed
     }
 
+    /// The AI tidy-up (SPEC.md 4.11): `text` with punctuation, capitals and small slips
+    /// fixed, or nil to keep it as it is (too short or long, or the reply did more than
+    /// tidy). Throws if the model is off, slow or won't answer.
+    public static func tidy(_ text: String, keeping phrases: [String], british: Bool) async throws -> String? {
+        guard AITidy.worthAsking(text) else { return nil }
+        guard isAvailable else { throw Problem.unavailable }
+        let reply = try await respond(
+            instructions: AITidy.instructions(british: british), prompt: AITidy.prompt(text),
+            within: AITidy.timeLimit(for: text), exact: true)
+        guard let tidied = AITidy.accept(original: text, tidied: reply, keeping: phrases), tidied != text else { return nil }
+        return tidied
+    }
+
+    /// Wakes the model while you're still talking, so the tidy-up afterwards doesn't wait
+    /// for it to load: after a pause the first answer took over 2.5 seconds (17 Nov 2026).
+    /// The session made here is the one the next tidy-up uses.
+    public static func warmUpTidy(british: Bool) {
+        guard #available(macOS 26, iOS 26, *), SystemLanguageModel.default.isAvailable else { return }
+        let instructions = AITidy.instructions(british: british)
+        let session = newSession(instructions: instructions)
+        session.prewarm()
+        Warm.shared.keep(session, for: instructions)
+    }
+
+    @available(macOS 26, iOS 26, *)
+    private static func newSession(instructions: String) -> LanguageModelSession {
+        // The gentler safety setting Apple provides for rewriting the user's
+        // own text; the default one blocked harmless shopping lists (2 Nov 2026).
+        LanguageModelSession(model: SystemLanguageModel(guardrails: .permissiveContentTransformations), instructions: instructions)
+    }
+
+    /// One warmed-up session, used once. Kept straight away (a lock, not an actor), so
+    /// even a very short dictation finds it.
+    @available(macOS 26, iOS 26, *)
+    private final class Warm: @unchecked Sendable {
+        static let shared = Warm()
+        private let lock = NSLock()
+        private var kept: (instructions: String, session: LanguageModelSession)?
+
+        func keep(_ session: LanguageModelSession, for instructions: String) {
+            lock.withLock { kept = (instructions, session) }
+        }
+
+        func take(for instructions: String) -> LanguageModelSession? {
+            lock.withLock {
+                guard let kept, kept.instructions == instructions else { return nil }
+                self.kept = nil
+                return kept.session
+            }
+        }
+    }
+
     /// Gives up after `seconds`, so a slow or stuck model can't leave Murmur
     /// unable to start the next dictation. Not a task group: that would still
     /// wait for the model to notice it was cancelled.
-    public static func respond(instructions: String, prompt: String, within seconds: Double) async throws -> String {
-        let work = Task { try await respond(instructions: instructions, prompt: prompt) }
+    /// `exact` picks the model's most likely words every time, for tidying rather than writing.
+    public static func respond(instructions: String, prompt: String, within seconds: Double, exact: Bool = false) async throws -> String {
+        let work = Task { try await respond(instructions: instructions, prompt: prompt, exact: exact) }
         return try await withCheckedThrowingContinuation { continuation in
             let first = FirstAnswer(continuation)
             Task { await first.resume(with: await work.result) }
@@ -77,14 +131,12 @@ public enum OnDeviceAI {
         }
     }
 
-    private static func respond(instructions: String, prompt: String) async throws -> String {
+    private static func respond(instructions: String, prompt: String, exact: Bool) async throws -> String {
         guard #available(macOS 26, iOS 26, *), SystemLanguageModel.default.isAvailable else { throw Problem.unavailable }
         do {
-            // The gentler safety setting Apple provides for rewriting the user's
-            // own text; the default one blocked harmless shopping lists (2 Nov 2026).
-            let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
-            let session = LanguageModelSession(model: model, instructions: instructions)
-            return try await session.respond(to: prompt).content
+            let session = Warm.shared.take(for: instructions) ?? newSession(instructions: instructions)
+            let options = exact ? GenerationOptions(sampling: .greedy) : GenerationOptions()
+            return try await session.respond(to: prompt, options: options).content
         } catch let error as LanguageModelSession.GenerationError {
             switch error {
             case .exceededContextWindowSize: throw Problem.tooLong

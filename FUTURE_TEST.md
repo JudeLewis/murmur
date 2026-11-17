@@ -16,3 +16,4 @@
 - **Webmail window titles (Mac)**: the browsers' title formats were checked against what they're known to show, not on Jude's Mac for each browser.
 - **A chosen microphone at a different rate (Mac)**: Jude's Mac has only 48 kHz microphones, so a 24 kHz one (AirPods) taking its own format in the tap hasn't been tried.
 - **Choosing the microphone and the lid (Mac)**: need real devices. The choice rules are tested (3.3).
+- **The AI tidy-up (Mac)**: needs Apple Intelligence and macOS 27's model, which CI machines don't have. The instructions, the check on what may change and where it comes in the order are tested (4.11); `./scripts/check-tidy.sh` checks the real model on this Mac. Tried on 17 Nov 2026 with 31 dictations, 20 of them Jude's own (kept out of the repo, as they're private). Whether it helps with Jude's real voice is only known from use.

@@ -16,7 +16,9 @@ enum Settings {
             "duckMusic": true,
             "commandMode": true,
             "fixCorrections": true,
-            "typeAsISpeak": true,
+            // AI tidy-up needs the whole dictation, so Type as I speak starts off (SPEC.md 4.11).
+            "aiTidy": true,
+            "typeAsISpeak": false,
             "layOutEmails": true,
             "ignoreQuieterVoices": true,
             "whisperMode": false,
@@ -56,10 +58,25 @@ enum Settings {
         set { defaults.set(newValue, forKey: "fixCorrections") }
     }
 
+    /// AI tidy-up and Type as I speak, which can't both be on (WritingMode).
+    private static var writingMode: WritingMode {
+        get { WritingMode(aiTidy: defaults.bool(forKey: "aiTidy"), typeAsISpeak: defaults.bool(forKey: "typeAsISpeak")) }
+        set {
+            defaults.set(newValue.aiTidy, forKey: "aiTidy")
+            defaults.set(newValue.typeAsISpeak, forKey: "typeAsISpeak")
+        }
+    }
+
     /// Type the words while you talk, not all at the end (SPEC.md 2.9).
     static var typeAsISpeak: Bool {
-        get { defaults.bool(forKey: "typeAsISpeak") }
-        set { defaults.set(newValue, forKey: "typeAsISpeak") }
+        get { writingMode.typeAsISpeak }
+        set { writingMode.setTypeAsISpeak(newValue) }
+    }
+
+    /// Punctuation, capitals and small slips fixed by Apple Intelligence (SPEC.md 4.11).
+    static var aiTidy: Bool {
+        get { writingMode.aiTidy }
+        set { writingMode.setAITidy(newValue) }
     }
 
     /// Greeting and sign-off on their own lines in emails (SPEC.md 4.9).

@@ -145,7 +145,7 @@ public enum SelfCorrection {
         words.filter { ["not", "never", "nor", "nothing", "nobody", "none", "cannot"].contains($0) || $0.hasSuffix("n't") }.count
     }
 
-    private static func contains(_ text: String, _ phrase: String) -> Bool {
+    static func contains(_ text: String, _ phrase: String) -> Bool {
         (" " + text + " ").contains(" " + phrase + " ")
     }
 

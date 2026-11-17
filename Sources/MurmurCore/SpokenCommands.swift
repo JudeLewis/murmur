@@ -67,9 +67,10 @@ public struct Dictation: Equatable, Sendable {
 
 extension Tidy {
     /// Everything between the model and the cursor, in order: tidying, British
-    /// spelling and the word list (`finish`), then "press enter", stray full stops,
-    /// spoken punctuation, "scratch that", line breaks, the email layout, casual
-    /// style, and last of all snippets, so their saved text is never changed.
+    /// spelling, the word list and spelt-out letters (`finish`), then "press enter",
+    /// stray full stops, brackets, spoken punctuation, "scratch that", the AI tidy-up
+    /// (async version only), line breaks, the email layout, casual style, and last of
+    /// all snippets, so their saved text is never changed.
     public static func dictation(
         _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false, email: Bool = false
     ) -> Dictation {
@@ -85,9 +86,28 @@ extension Tidy {
         _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
         email: Bool = false, fix: @Sendable (String) async -> String?
     ) async -> Dictation {
+        await dictation(raw, words: words, snippets: snippets, british: british, casual: casual, email: email, fix: fix) { _ in nil }
+    }
+
+    /// The same, with the AI tidy-up too (SPEC.md 4.11), after spoken punctuation and
+    /// "scratch that" and before line breaks, emails, casual style and snippets. `tidy`
+    /// asks the on-device AI and returns the checked reply, or nil to keep the text.
+    /// Its reply gets British spelling, the word list and the doubled-marks check again.
+    public static func dictation(
+        _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
+        email: Bool = false, fix: @Sendable (String) async -> String?, tidy: @Sendable (String) async -> String?
+    ) async -> Dictation {
         var finished = finish(raw, words: words, british: british)
         if let fixed = await fix(finished) { finished = fixed }
-        return dictation(finished: finished, words: words, snippets: snippets, british: british, casual: casual, email: email)
+        var (text, pressEnter) = marks(finished, words: words)
+        if !text.isEmpty, let tidied = await tidy(text) {
+            // The word list again, but only entries that can't change their own text ("murmur ->
+            // Murmur app" would give "Murmur app app"), as the text has already been through it.
+            text = DoubledMarks.remove(from: finish(tidied, words: WordList.safeToRepeat(words), british: british))
+        }
+        return Dictation(
+            text: layout(text, words: words, snippets: snippets, british: british, casual: casual, email: email),
+            pressEnter: pressEnter)
     }
 
     /// The same, for text that has already been through `finish`.
@@ -95,22 +115,41 @@ extension Tidy {
         finished: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
         email: Bool = false
     ) -> Dictation {
+        let (text, pressEnter) = marks(finished, words: words)
+        return Dictation(
+            text: layout(text, words: words, snippets: snippets, british: british, casual: casual, email: email),
+            pressEnter: pressEnter)
+    }
+
+    /// "Press enter" taken off the end, then the marks: stray full stops, brackets,
+    /// spoken punctuation, doubled marks and "scratch that".
+    static func marks(_ finished: String, words: [WordEntry]) -> (text: String, pressEnter: Bool) {
         let (text, pressEnter) = SpokenCommands.pressEnter(in: finished)
         // Stray stops first, so a full stop you said yourself is never taken out.
         // Brackets before the other marks, so the marks they trim are only ever the model's guesses.
         let punctuated = DoubledMarks.remove(
             from: SpokenPunctuation.apply(to: SpokenSymbols.apply(to: StrayStops.remove(from: text, keeping: words))))
-        var result = SpokenCommands.lineBreaks(in: ScratchThat.apply(punctuated))
+        return (ScratchThat.apply(punctuated), pressEnter)
+    }
+
+    /// Line breaks, the email layout, casual style, then snippets last so their text is never changed.
+    static func layout(
+        _ text: String, words: [WordEntry], snippets: [Snippet], british: Bool, casual: Bool, email: Bool
+    ) -> String {
+        var result = SpokenCommands.lineBreaks(in: text)
         if email { result = EmailLayout.apply(result) }
         if casual { result = Tidy.casual(result, keeping: words) }
-        // Triggers get the same spelling changes as the text, so "my favorite color" still matches.
-        let matching = snippets.map { snippet in
+        return Snippets.apply(matching(snippets, words: words, british: british), to: result)
+    }
+
+    /// Snippets with their phrases spelt as the text will be by then (British spelling
+    /// and the word list), so "my favorite color" still matches "my favourite colour".
+    public static func matching(_ snippets: [Snippet], words: [WordEntry], british: Bool) -> [Snippet] {
+        snippets.map { snippet in
             var changed = snippet
             changed.trigger = WordList.apply(words, to: british ? BritishSpelling.apply(to: snippet.trigger) : snippet.trigger)
             return changed
         }
-        result = Snippets.apply(matching, to: result)
-        return Dictation(text: result, pressEnter: pressEnter)
     }
 
     /// Casual style for chats: no capital at the start and no full stop at the

@@ -97,3 +97,11 @@ public enum WordList {
         return result
     }
 }
+
+extension WordList {
+    /// Entries that leave their own text alone, so running the list twice changes nothing
+    /// more: not "murmur -> Murmur app", which would make "Murmur app" "Murmur app app".
+    public static func safeToRepeat(_ words: [WordEntry]) -> [WordEntry] {
+        words.filter { !$0.written.isEmpty && apply([$0], to: $0.written) == $0.written }
+    }
+}

@@ -4,7 +4,8 @@ Live work only. Finished items move to archive/.
 
 ## Now
 
-- [ ] Jude uses it for a few days: note anything it gets wrong, and words to add to the word list.
+- [ ] Jude tries the AI tidy-up (17 Nov 2026) for a few days: note anything it gets wrong, and words to add to the word list. If Apple's model isn't good enough, the fallback is Qwen 3.5 4B on the Mac (docs/architecture.md, AI tidy-up).
+- [ ] iPhone: the AI tidy-up in the app, once the Mac version has proved itself (needs iOS 27's model on the phone).
 
 ## Ideas, not started
 
@@ -12,7 +13,7 @@ Live work only. Finished items move to archive/.
 - [ ] One microphone class for Mac and iPhone (Recorder and SessionMic are near copies; found in review, 2 Nov 2026). Left for now so the Mac app stays unchanged while the iPhone is new.
 
 - [ ] If words are still misheard after a few days of the 8 Nov fixes: try Parakeet Ultra (FluidAudio's published tests show fewer mistakes than Bark 3.0 Clean, 3.81% against 4.66%, but it keeps "um" and is a new 595 MB download).
-- [ ] Word list guides the model while it listens, not just fixes text afterwards (FluidAudio's custom vocabulary boosting; about 130 MB more to download).
-- [ ] Remove a stray comma left where a filler was dropped ("my favourite colour is, grey").
+- [ ] AI tidy-up knows the text around the cursor and the app, as Wispr Flow does, to spell names and match the tone.
+- [ ] Remove a stray comma left where a filler was dropped ("my favourite colour is, grey"). The AI tidy-up may already fix this; check in use.
 - [ ] iPhone: Type as I speak on the keyboard too, once the Mac version has been used for a while.
 - [ ] Per-app styles like Wispr's (emails formal, chats casual, notes as said), building on the email layout.

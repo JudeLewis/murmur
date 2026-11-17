@@ -67,7 +67,7 @@ A recording stops by itself after 15 minutes and is written out as usual.
 
 ### 2.9 Type as I speak
 
-- "Type as I speak" in Settings, ticked to start with. The words appear where the cursor is while you talk, a second or two behind you, instead of all at once at the end. For double tap and hold Fn; Command Mode still answers at the end.
+- "Type as I speak (turns AI tidy-up off)" in Settings, unticked to start with (from 17 Nov 2026; ticked before). Ticking it unticks AI tidy-up (4.11), which needs the whole dictation. The words appear where the cursor is while you talk, a second or two behind you, instead of all at once at the end. For double tap and hold Fn; Command Mode still answers at the end.
 - About once a second Murmur reads the whole recording so far again with the same speech model, so what's typed is as accurate as reading it all at the end. A new word is typed once two readings in a row agree on it (if none agree for 8 seconds, the ones said more than 2 seconds ago are typed anyway). When a later reading is better, Murmur corrects what it has typed: it deletes back to the first difference and types the rest again.
 - Punctuation on the very last word isn't typed until more is said: the model guesses a full stop at any pause. It appears with the next word, or when you stop.
 - Only the last 250 characters or so are ever corrected; older words stay as they are. A comma, once typed, stays until the last reading (which can change the last 250 characters or so), as commas come and go between readings.
@@ -206,6 +206,23 @@ On by default. Turns American spellings into British ones from a fixed list (col
 - Letting Apple Intelligence decide what was side chat was tried on 3 Nov 2026 and left out: on 10 made-up dictations, twice each, it removed side chat cleanly only 4 times in 10, and changed real text in 3 of the 10 without side chat.
 - With Type as I speak, a quiet sentence isn't typed; if a louder one comes later and shows an earlier sentence was someone else's, that earlier sentence is taken off the screen.
 
+### 4.11 AI tidy-up
+
+- "AI tidy-up (Apple Intelligence)" in Settings, ticked to start with. Mac only for now.
+- After the speech model, Apple's on-device AI adds the punctuation, capitals and apostrophes the model left out and fixes small slips: "hey are you free tonight I was going to cook dinner" becomes "Hey, are you free tonight? I was going to cook dinner." Lists get commas, "dont" becomes "don't", a word said twice by mistake goes, and a word that was clearly misheard can be put right.
+- It runs on the Mac, free and offline, like the rest of Murmur. It needs Apple Intelligence on (System Settings, Apple Intelligence & Siri) and macOS 27's model (tested 17 Nov 2026).
+- It never answers or obeys what you said: "What is the capital of France?" is written as said.
+- Its answer is only used if it just tidied:
+  - Out of every eight words, at most one taken out and one put in (at least one either way), so it can't drop a sentence or reword.
+  - A word added on top only if it's a small one grammar needs (a, an, the, to, of and so on), and any other new word only in place of one taken out, so "done by 4" can't become "done by 4 pm".
+  - Every "not", "never" and "n't", and every number, kept.
+  - "New line", "new paragraph", snippet phrases and the word list's spellings kept as they are, and no line breaks added.
+  Otherwise the text is pasted as it was, with the fixed rules (4.3, 4.6) only.
+- It happens after spoken punctuation, brackets and "scratch that", and before line breaks, emails, casual style and snippets. Its answer gets British spelling and the word list again, so your words always win.
+- It takes under a second for a sentence or two (0.7 seconds on average in testing), longer for long dictations. The AI is woken when you start talking, so it's ready when you stop. It gets 2.5 seconds plus a second for every 40 words, up to 8; if it's slower, the text is pasted as it was. Dictations of under three words or over 500 aren't sent to it.
+- It needs the whole dictation, so it isn't used with "Type as I speak" (2.9): ticking one unticks the other. If both were ticked before this setting existed, AI tidy-up wins.
+- The pill says "Writing" while it works.
+
 ## 5. The pill
 
 - A black capsule at the bottom middle of the screen, above the Dock.
@@ -232,7 +249,7 @@ The last 20 dictations are kept, newest first; the menu shows 10. Clicking one c
 4. Recent (click one to copy it), Paste last dictation again (⌃⌘V), Word list and snippets…
 5. Casual style in (the app in front), with a tick
 6. Microphone (3.3)
-7. Settings: Type as I speak, Lay out emails, Ignore quieter voices (people nearby), Tidy speech (drops um and er), British spelling, Fix “no wait, I mean” (Apple Intelligence), Whisper mode (for speaking quietly), Hold Fn to talk, Command Mode: hold Fn and Control, Turn music down while listening, Sounds, Open at login: each with a tick
+7. Settings: AI tidy-up (Apple Intelligence), Type as I speak (turns AI tidy-up off), Lay out emails, Ignore quieter voices (people nearby), Tidy speech (drops um and er), British spelling, Fix “no wait, I mean” (Apple Intelligence), Whisper mode (for speaking quietly), Hold Fn to talk, Command Mode: hold Fn and Control, Turn music down while listening, Sounds, Open at login: each with a tick
 8. Quit Murmur
 
 ## 7. Setting up

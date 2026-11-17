@@ -27,6 +27,8 @@ Separate from Clocked In (~/Developer/clocked-in). Never touch that folder from 
 | check the speech model end to end | `./scripts/check-speech.sh` (makes speech with `say`, transcribes it, prints OK or NOT OK) |
 | try any recording | `.build/debug/Murmur --transcribe file.wav [--exact] [--whisper]` |
 | try Type as I speak on a recording | `.build/debug/Murmur --live file.wav` (what would be on screen each second, how much was corrected, then the finished text and the all-at-once text) |
+| check the AI tidy-up end to end | `./scripts/check-tidy.sh` (made-up dictations through Apple's model, prints OK or NOT OK; run after a macOS update) |
+| try the AI tidy-up on any text | `.build/debug/Murmur --tidy "so i was thinking we could go to the park what do you think"` or `--tidy-file lines.txt` (each line as if the speech model wrote it, with timings) |
 | try the on-device AI | `.build/debug/Murmur --rewrite "make this friendlier" "Send me the report."` or `--fix "Monday, no wait, I mean Tuesday."` |
 | install and run Jude's copy | `./scripts/install.sh` (build, wrap as Murmur.app, sign, copy to /Applications, open) |
 | install on Jude's iPhone | `./scripts/install-phone.sh` (build, sign, install, open; phone unlocked, plugged in or on the same Wi-Fi) |
@@ -52,6 +54,7 @@ Sources/MurmurCore/        Plain logic, no AppKit or audio; all of it tested
   SpokenSymbols.swift      Brackets, quotes and slashes said out loud; letters said one by one; doubled marks
   Ducking.swift            Turning music down while listening (Mac)
   OnDeviceAIPrompts.swift  Command Mode and self-correction prompts and checks; Whisper mode; ⌃⌘V; microphone choice
+  AITidy.swift             AI tidy-up: the instructions for Apple's model and the check that it only tidied
   LiveTyping.swift         Type as I speak: which words to show, corrections, and what to delete and type
   Context.swift            Emails laid out as emails, "scratch that", and quieter voices left out
   PhoneLink.swift          iPhone: what the keyboard shows, sends and types; the 10 minute session
@@ -118,7 +121,9 @@ Format: **Rule**: why it matters.
 - **Open a newly installed iPhone app by hand the first time**: `devicectl` refused to launch it ("invalid code signature, inadequate entitlements") until Jude tapped the icon once; after that it launched fine (2 Nov 2026).
 - **Every iPhone install makes the model get ready again, for minutes**: iOS drops the copy prepared for the iPhone's chip when the app is reinstalled. On 2 Nov 2026 it took 75 seconds to 5.5 minutes per install, and Jude twice saw "Writing" for ages. Keeping the same build number doesn't help (tested: still 75 seconds). Later opens of the same install take 0.4 seconds. The app now shows a "Getting Murmur ready" card with a timer and keeps the screen awake; install-phone.sh keeps trying to open the app until the phone is unlocked. Still bundle phone changes into few installs.
 - **Type as I speak must read the whole recording, not short pieces**: reading the last few seconds gave stray full stops and doubled words that reading it all at once didn't (8 Nov 2026). Check with `Murmur --live`: "Finished" should match "All at once".
-- **The first load of each speech model takes about a minute**: macOS prepares the model for the Neural Engine once; later loads take under a second (seen 2 Nov 2026). Not a hang.
+- **The first load of each speech model takes about a minute**: macOS prepares the model for the Neural Engine once; later loads take under a second (seen 2 Nov 2026). Not a hang. After a macOS update it happens again: 2.5 minutes after the macOS 27 update (17 Nov 2026).
+- **After a macOS update, Apple's AI model isn't there for a while**: on 17 Nov 2026, just after the macOS 27 update, FoundationModels said "model not ready" for about 20 minutes while the new model downloaded. The AI tidy-up, Command Mode and the "no wait" fix all skip quietly until then. Check with `./scripts/check-tidy.sh`.
+- **Wake Apple's model before asking it**: cold, the first answer after a pause took over the 2.5 second limit and the dictation wasn't tidied (17 Nov 2026). OnDeviceAI.warmUpTidy runs when listening starts.
 
 ## Sources of truth
 

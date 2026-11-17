@@ -209,6 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         spotEmail(in: front)
         playSound("Tink")
         pill.show(.listening)
+        if Settings.aiTidy, !commandMode { OnDeviceAI.warmUpTidy(british: Settings.british) }
         // After the Tink, so it isn't turned down too.
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(250))
@@ -415,15 +416,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let words = Settings.words()
         let snippets = Settings.snippets
         let fixOn = Settings.fixCorrections
+        let tidyOn = Settings.aiTidy
+        let british = Settings.british
         let triggers = snippets.map(\.trigger)
-        // "Monday, no wait, I mean Tuesday": the on-device AI may only take words out (SPEC.md 4.8).
+        let protected = AITidy.protected(snippets: snippets, words: words, british: british)
         let dictation = await Tidy.dictation(
-            raw, words: words, snippets: snippets, british: Settings.british, casual: casual, email: dictatingEmail
-        ) { finished in
-            guard fixOn, let fixed = try? await OnDeviceAI.fixSelfCorrection(in: finished, keeping: triggers) else { return nil }
-            log.notice("Fixed a self-correction")
-            return fixed
-        }
+            raw, words: words, snippets: snippets, british: british, casual: casual, email: dictatingEmail,
+            // "Monday, no wait, I mean Tuesday": the on-device AI may only take words out (SPEC.md 4.8).
+            fix: { finished in
+                guard fixOn, let fixed = try? await OnDeviceAI.fixSelfCorrection(in: finished, keeping: triggers) else { return nil }
+                log.notice("Fixed a self-correction")
+                return fixed
+            },
+            // Punctuation, capitals and small slips; a reply that does more is ignored (SPEC.md 4.11).
+            tidy: { text in
+                guard tidyOn else { return nil }
+                let started = Date.now
+                do {
+                    let tidied = try await OnDeviceAI.tidy(text, keeping: protected, british: british)
+                    let seconds = String(format: "%.1f", Date.now.timeIntervalSince(started))
+                    log.notice("AI tidy-up \(tidied == nil ? "left the text as it was" : "used", privacy: .public) after \(seconds, privacy: .public) s")
+                    return tidied
+                } catch {
+                    log.notice("AI tidy-up skipped: \(String(describing: error), privacy: .public)")
+                    return nil
+                }
+            })
         let text = dictation.text
         flow.finished()
         updateIcon()
@@ -636,7 +654,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func settingsMenu() -> NSMenuItem {
         let submenu = NSMenu()
-        submenu.addItem(item("Type as I speak", #selector(toggleTypeAsISpeak), on: Settings.typeAsISpeak))
+        submenu.addItem(item("AI tidy-up (Apple Intelligence)", #selector(toggleAITidy), on: Settings.aiTidy))
+        submenu.addItem(item("Type as I speak (turns AI tidy-up off)", #selector(toggleTypeAsISpeak), on: Settings.typeAsISpeak))
         submenu.addItem(item("Lay out emails", #selector(toggleLayOutEmails), on: Settings.layOutEmails))
         submenu.addItem(item("Ignore quieter voices (people nearby)", #selector(toggleIgnoreQuieterVoices), on: Settings.ignoreQuieterVoices))
         submenu.addItem(item("Tidy speech (drops um and er)", #selector(toggleTidy), on: Settings.model == .tidy))
@@ -725,6 +744,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleWhisperMode() { Settings.whisperMode.toggle() }
     @objc private func toggleTypeAsISpeak() { Settings.typeAsISpeak.toggle() }
+    @objc private func toggleAITidy() { Settings.aiTidy.toggle() }
     @objc private func toggleLayOutEmails() { Settings.layOutEmails.toggle() }
     @objc private func toggleIgnoreQuieterVoices() { Settings.ignoreQuieterVoices.toggle() }
 

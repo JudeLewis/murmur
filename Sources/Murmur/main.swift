@@ -83,6 +83,53 @@ if let index = CommandLine.arguments.firstIndex(of: "--live"), index + 1 < Comma
     dispatchMain()
 }
 
+// AI tidy-up test mode (SPEC.md 4.11): each line of a file, or one text, as if the
+// speech model had just written it, through what the app does with the menu's settings
+// (no casual style or email layout, which depend on the app in front), with timings.
+//   Murmur --tidy "so i was thinking we could go to the park what do you think"
+//   Murmur --tidy-file dictations.txt
+if let index = CommandLine.arguments.firstIndex(where: { $0 == "--tidy" || $0 == "--tidy-file" }), index + 1 < CommandLine.arguments.count {
+    let arguments = CommandLine.arguments
+    Task { @MainActor in
+        Settings.registerDefaults()
+        let words = Settings.words(), snippets = Settings.snippets, british = Settings.british
+        let triggers = snippets.map(\.trigger)
+        let protected = AITidy.protected(snippets: snippets, words: words, british: british)
+        let fixOn = Settings.fixCorrections
+        let lines = arguments[index] == "--tidy" ? [arguments[index + 1]]
+            : ((try? String(contentsOfFile: arguments[index + 1], encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
+        for line in lines where !line.trimmingCharacters(in: .whitespaces).isEmpty {
+            // As in the app: the model is woken when listening starts, a second or more before.
+            OnDeviceAI.warmUpTidy(british: british)
+            try? await Task.sleep(for: .seconds(1))
+            let started = Date.now
+            let note = Note()
+            let dictation = await Tidy.dictation(
+                line, words: words, snippets: snippets, british: british,
+                fix: { fixOn ? try? await OnDeviceAI.fixSelfCorrection(in: $0, keeping: triggers) : nil },
+                tidy: { text in
+                    do {
+                        let tidied = try await OnDeviceAI.tidy(text, keeping: protected, british: british)
+                        await note.set(tidied == nil ? "kept" : "tidied")
+                        return tidied
+                    } catch {
+                        await note.set(OnDeviceAI.message(for: error))
+                        return nil
+                    }
+                })
+            print(String(format: "IN  %@\nOUT %@\n    (%@, %.1f s)\n", line, dictation.text, await note.text, Date.now.timeIntervalSince(started)))
+        }
+        exit(0)
+    }
+    dispatchMain()
+}
+
+/// What happened to one line in --tidy, for printing.
+actor Note {
+    var text = "too short or long to ask"
+    func set(_ value: String) { text = value }
+}
+
 // Test modes for the on-device AI, run the same way as in the app:
 //   Murmur --rewrite "make this friendlier" "Send me the report."   (Command Mode)
 //   Murmur --fix "Monday, no wait, I mean Tuesday."                 (self-corrections)
