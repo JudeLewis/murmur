@@ -165,3 +165,48 @@ struct AITidyProtectedTests {
         #expect(AITidy.accept(original: "I use Murmur every day", tidied: "I use Murmur every day.", keeping: protected) != nil)
     }
 }
+
+@Suite("4.11 AI tidy-up: numbers")
+struct AITidyNumberTests {
+    private func digits(_ text: String) -> String { SpokenNumbers.numbers(SpokenNumbers.normalised(AITidy.words(text))).joined(separator: " ") }
+
+    @Test func spokenNumbersAreReadAsDigits() {
+        #expect(digits("after six") == "6")
+        #expect(digits("three thirty on the twenty first") == "330 21")
+        #expect(digits("two hundred and fifty pounds") == "£250")
+        #expect(digits("three thousand four hundred") == "3400")
+        #expect(digits("in twenty twenty five") == "2025")
+        #expect(digits("oh seven seven double oh nine") == "077009")
+        #expect(digits("a hundred percent") == "100%")
+        #expect(digits("oh I forgot the meeting at six") == "6")
+        #expect(digits("wait a second") == "")
+        #expect(digits("two hundred three hundred") == "203100")
+    }
+
+    @Test func numbersWrittenAsDigitsAreAccepted() {
+        #expect(AITidy.accept(original: "Hey, are you free tonight (after six)? I was going to cook.",
+                              tidied: "Hey, are you free tonight (after 6)? I was going to cook.") != nil)
+        #expect(AITidy.accept(original: "the meeting is at three thirty on tuesday the fourth of november",
+                              tidied: "The meeting is at 3:30 on Tuesday 4 November.") != nil)
+        #expect(AITidy.accept(original: "it costs about two hundred and fifty pounds and takes three weeks",
+                              tidied: "It costs about £250 and takes three weeks.") != nil)
+        #expect(AITidy.accept(original: "we grew by fifteen percent last year", tidied: "We grew by 15% last year.") != nil)
+        #expect(AITidy.accept(original: "call me on oh seven seven double oh nine eight one two three four five",
+                              tidied: "Call me on 07700 981 2345.") != nil)
+    }
+
+    @Test func aChangedNumberIsStillRefused() {
+        #expect(AITidy.accept(original: "after six", tidied: "After 7.") == nil)
+        #expect(AITidy.accept(original: "it costs about two hundred and fifty pounds", tidied: "It costs about £25.") == nil)
+        #expect(AITidy.accept(original: "it's at three thirty on monday", tidied: "It's at half three on Monday.") == nil)
+        #expect(AITidy.accept(original: "we'll be done by 4 so see you then", tidied: "We'll be done by 4 pm, so see you then.") == nil)
+        #expect(AITidy.accept(original: "it costs fifty pence", tidied: "It costs £50.") == nil)
+        #expect(AITidy.accept(original: "it costs fifty pounds", tidied: "It costs 50%.") == nil)
+        let long = "we should look at room 1 and 23 again before the end of the week when everyone is back in"
+        #expect(AITidy.accept(original: long, tidied: "We should look at room 12 and 3 again before the end of the week when everyone is back in.") == nil)
+    }
+
+    @Test func fillersAndOrdinaryWordsAreNotNumbers() {
+        #expect(AITidy.accept(original: "oh I forgot the meeting at six", tidied: "I forgot the meeting at 6.") != nil)
+    }
+}

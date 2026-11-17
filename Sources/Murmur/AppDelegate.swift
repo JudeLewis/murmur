@@ -654,7 +654,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func settingsMenu() -> NSMenuItem {
         let submenu = NSMenu()
-        submenu.addItem(item("AI tidy-up (Apple Intelligence)", #selector(toggleAITidy), on: Settings.aiTidy))
+        // Apple's model can be missing for a while, such as after a macOS update (SPEC.md 4.11).
+        let waiting = Settings.aiTidy && !OnDeviceAI.isAvailable
+        submenu.addItem(item(waiting ? "AI tidy-up (waiting for Apple Intelligence)" : "AI tidy-up (Apple Intelligence)",
+                             #selector(toggleAITidy), on: Settings.aiTidy))
         submenu.addItem(item("Type as I speak (turns AI tidy-up off)", #selector(toggleTypeAsISpeak), on: Settings.typeAsISpeak))
         submenu.addItem(item("Lay out emails", #selector(toggleLayOutEmails), on: Settings.layOutEmails))
         submenu.addItem(item("Ignore quieter voices (people nearby)", #selector(toggleIgnoreQuieterVoices), on: Settings.ignoreQuieterVoices))

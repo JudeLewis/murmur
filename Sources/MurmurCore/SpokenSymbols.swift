@@ -35,22 +35,50 @@ public enum SpokenSymbols {
         var result = ""
         var position = text.startIndex
         var changed = false
+        // A sentence end the model guessed just before a bracket, moved to after it:
+        // "tonight? (After six). I was" becomes "tonight (after six)? I was".
+        var moved: Moved?
         for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
             guard let range = Range(match.range, in: text), range.lowerBound >= position,
                   let kind = (0..<kinds.count).first(where: { match.range(at: $0 + 1).location != NSNotFound }).map({ kinds[$0] }),
                   !isTalkedAbout(range, in: text) else { continue }
             result += text[position..<range.lowerBound]
             var after = range.upperBound
+            let isBracket = "([)]".contains(kind.symbol)
             switch kind.side {
             case .opening:
                 trimEnd(&result, dropping: [",", ";", ":"])
+                if isBracket, let earlier = moved { earlier.putBack(into: &result); moved = nil }
+                if isBracket, let last = result.last, ".?!".contains(last),
+                   result.dropLast().last != ".", !(last == "." && endsInAbbreviation(result.dropLast())) {
+                    result.removeLast()
+                    moved = Moved(mark: last, at: result.count)
+                }
                 if let last = result.last, !last.isNewline, !"([\u{201C}/".contains(last) { result += " " }
                 result += kind.symbol
                 after = skip(from: after, in: text, dropping: guessed)
+                if isBracket, moved != nil {
+                    moved?.inside = result.count
+                    let word = smallFirstWord(in: text, from: after, into: &result)
+                    moved?.lowered = word != after
+                    after = word
+                }
             case .closing:
                 trimEnd(&result, dropping: guessed)
                 result += kind.symbol
                 after = skip(from: after, in: text, dropping: [])
+                if isBracket, let pending = moved {
+                    moved = nil
+                    if pending.holdsASentence(result) {
+                        // A whole sentence in brackets: the mark goes back where it was.
+                        pending.putBack(into: &result)
+                    } else if after < text.endIndex, ".?!".contains(text[after]) {
+                        result.append(pending.mark == "." ? text[after] : pending.mark)
+                        after = text.index(after: after)
+                    } else if after == text.endIndex || !",;:".contains(text[after]) {
+                        result.append(pending.mark)
+                    }
+                }
                 if after < text.endIndex, text[after].isLetter || text[after].isNumber || "(\u{201C}".contains(text[after]) { result += " " }
             case .joining:
                 trimEnd(&result, dropping: guessed)
@@ -61,7 +89,56 @@ public enum SpokenSymbols {
             changed = true
         }
         guard changed else { return text }
+        // A bracket never closed: the mark goes back.
+        moved?.putBack(into: &result)
         return result + text[position...]
+    }
+
+    /// A sentence end the model guessed just before a bracket, while it waits for the closing one.
+    private struct Moved {
+        let mark: Character
+        /// Where it was taken from, and where the words inside the bracket start.
+        let at: Int
+        var inside = 0
+        /// Whether the first word inside lost a capital.
+        var lowered = false
+
+        /// A guessed sentence end followed by a space inside means the brackets hold whole sentences.
+        /// "3.5" or "e.g." don't count.
+        func holdsASentence(_ result: String) -> Bool {
+            let inner = Array(result.dropFirst(inside))
+            return inner.indices.dropLast().contains { ".?!".contains(inner[$0]) && inner[$0 + 1] == " " }
+        }
+
+        func putBack(into result: inout String) {
+            var characters = Array(result)
+            if lowered, inside < characters.count { characters[inside] = Character(characters[inside].uppercased()) }
+            characters.insert(mark, at: at)
+            result = String(characters)
+        }
+    }
+
+    /// Small words the model gave a capital, having guessed a new sentence before the bracket.
+    /// Names keep theirs: only these words lose it.
+    private static let usuallySmall: Set<String> = [
+        "after", "before", "about", "around", "and", "but", "or", "so", "if", "when", "which", "that", "the", "a", "an",
+        "see", "not", "maybe", "just", "only", "including", "like", "for", "from", "with", "without", "at", "on", "in",
+        "by", "to", "probably", "hopefully", "ideally", "roughly", "also", "even", "especially", "mostly",
+    ]
+
+    /// "etc." and "e.g." keep their full stop in front of a bracket.
+    private static func endsInAbbreviation(_ text: Substring) -> Bool {
+        let word = String(text.reversed().prefix { !$0.isWhitespace }.reversed())
+        return word.contains(".") || StrayStops.abbreviations.contains(word.lowercased())
+    }
+
+    /// Copies the first word after an opening bracket, without a capital the model guessed.
+    private static func smallFirstWord(in text: String, from index: String.Index, into result: inout String) -> String.Index {
+        let word = text[index...].prefix { $0.isLetter }
+        guard let first = word.first, first.isUppercase, !word.dropFirst().contains(where: \.isUppercase),
+              usuallySmall.contains(word.lowercased()) else { return index }
+        result += word.lowercased()
+        return text.index(index, offsetBy: word.count)
     }
 
     private static func trimEnd(_ text: inout String, dropping marks: Set<Character>) {

@@ -251,6 +251,20 @@ struct SpokenSymbolsTests {
         #expect(written("We need to start quotes for new clients") == "We need to start quotes for new clients")
     }
 
+    @Test func aGuessedSentenceEndMovesAfterTheBracket() {
+        #expect(written("Hey, are you free tonight? Open bracket. After six. Close bracket. I was going to cook.")
+            == "Hey, are you free tonight (after six)? I was going to cook.")
+        #expect(written("We met on Monday. Open bracket, the third, close bracket, and talked.")
+            == "We met on Monday (the third), and talked.")
+        #expect(written("Ask Tom. Open bracket. Sarah knows. Close bracket.") == "Ask Tom (Sarah knows).")
+        #expect(written("I went home. Open bracket it was late. Close bracket.") == "I went home (it was late).")
+        #expect(written("Pens etc. Open bracket blue ones close bracket") == "Pens etc. (blue ones)")
+        #expect(written("Is it ready? Open bracket after six.") == "Is it ready? (after six.")
+        #expect(written("Is it ready? Open bracket. About 3.5 hours. Close bracket.") == "Is it ready (about 3.5 hours)?")
+        #expect(written("Ready? Open bracket he said open quote soon close quote close bracket")
+            == "Ready (he said \u{201C}soon\u{201D})?")
+    }
+
     @Test func saidPunctuationNextToABracketStays() {
         #expect(written("See open bracket page two full stop close bracket") == "See (page two.)")
         #expect(written("Note colon open bracket see below close bracket") == "Note: (see below)")
