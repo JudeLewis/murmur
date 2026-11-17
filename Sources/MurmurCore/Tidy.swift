@@ -21,7 +21,8 @@ public enum Tidy {
 
         if british { text = BritishSpelling.apply(to: text) }
         text = WordList.apply(words, to: text)
-        return text
+        // After the word list, so an entry for the letters as heard ("a g p -> a GP") still works.
+        return SpeltLetters.join(text)
     }
 
     /// A space after each dictation, so the next one starts a new word

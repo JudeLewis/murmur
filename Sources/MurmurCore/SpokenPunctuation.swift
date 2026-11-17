@@ -71,6 +71,8 @@ public enum SpokenPunctuation {
     /// Adds what came after a spoken mark, with a space and the right capital.
     private static func joined(_ result: String, _ next: Substring, after mark: String?) -> String {
         guard let mark, !next.isEmpty else { return result + next }
+        // A closing bracket or quote said straight after: "(page two full stop close bracket" is "(page two.)".
+        if let first = next.first, ")]\u{201D}".contains(first) { return result + next }
         let word = next.prefix { $0.isLetter }
         var changed = String(next)
         if let first = word.first, !word.dropFirst().contains(where: \.isUppercase) {
@@ -88,7 +90,7 @@ public enum SpokenPunctuation {
 /// ("I haven't. worked"), or after a word no sentence ends on ("the. Whole").
 public enum StrayStops {
     private static let neverEndASentence: Set<String> = ["a", "an", "the", "and", "but", "or", "my", "your", "our", "their"]
-    private static let abbreviations: Set<String> = [
+    static let abbreviations: Set<String> = [
         "etc", "vs", "mr", "mrs", "ms", "dr", "st", "approx", "no", "inc", "ltd", "jr", "sr", "eg", "ie", "prof",
     ]
     private static let notNames: Set<String> = ["I", "I'm", "I've", "I'll", "I'd", "I\u{2019}m", "I\u{2019}ve", "I\u{2019}ll", "I\u{2019}d"]

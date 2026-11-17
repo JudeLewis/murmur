@@ -97,7 +97,9 @@ extension Tidy {
     ) -> Dictation {
         let (text, pressEnter) = SpokenCommands.pressEnter(in: finished)
         // Stray stops first, so a full stop you said yourself is never taken out.
-        let punctuated = SpokenPunctuation.apply(to: StrayStops.remove(from: text, keeping: words))
+        // Brackets before the other marks, so the marks they trim are only ever the model's guesses.
+        let punctuated = DoubledMarks.remove(
+            from: SpokenPunctuation.apply(to: SpokenSymbols.apply(to: StrayStops.remove(from: text, keeping: words))))
         var result = SpokenCommands.lineBreaks(in: ScratchThat.apply(punctuated))
         if email { result = EmailLayout.apply(result) }
         if casual { result = Tidy.casual(result, keeping: words) }

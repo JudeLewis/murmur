@@ -49,6 +49,7 @@ Sources/MurmurCore/        Plain logic, no AppKit or audio; all of it tested
   Snippets.swift           Say a phrase, get saved text
   SpokenCommands.swift     "new line", "new paragraph", "press enter"; casual style; Tidy.dictation, the whole order
   SpokenPunctuation.swift  "question mark" and friends become symbols; full stops that can't be real go
+  SpokenSymbols.swift      Brackets, quotes and slashes said out loud; letters said one by one; doubled marks
   Ducking.swift            Turning music down while listening (Mac)
   OnDeviceAIPrompts.swift  Command Mode and self-correction prompts and checks; Whisper mode; ⌃⌘V; microphone choice
   LiveTyping.swift         Type as I speak: which words to show, corrections, and what to delete and type

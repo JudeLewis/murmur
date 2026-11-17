@@ -160,6 +160,9 @@ Jude asked for the words to appear while talking, not at the end, and picked "ty
 
 - **Fixed rules, in MurmurCore** (SpokenPunctuation, StrayStops), so they're instant, work on the iPhone too and run on every live reading. Stray stops are removed first, so a full stop you said yourself is never taken out.
 - **Only "exclamation" allows a guessed comma inside the phrase**: "The car park was full. Stop by later" must not become a spoken full stop.
+- **Brackets and quotes join onto a word (added 17 Nov 2026)** (SpokenSymbols), so they have their own rules rather than sharing SpokenPunctuation's, which always puts a space after the mark. Jude found "open bracket" written as words.
+- **Brackets run before the other spoken marks**, so the marks they trim beside them can only be the model's guesses, never a "full stop" you said.
+- **Spelt-out letters are joined after the word list** (SpeltLetters, at the end of Tidy.finish), so an entry for the letters as heard ("a g p -> a GP") can fix what the joining can't tell apart, and fixes learnt from recent dictations (which have spaces between letters) keep working. Seen in Jude's dictations: "N H S", "A G P".
 - **"Ellipsis" as well as "dot dot dot"**: Bark 3.0 Clean throws away repeated words, so "dot dot dot" often arrives as "dot" or nothing (seen 8 Nov 2026).
 
 ## Knowing what you're writing (added 3 Nov 2026)

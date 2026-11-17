@@ -217,3 +217,75 @@ struct StrayStopsTests {
         #expect(Tidy.dictation("Bread and full stop then milk", words: [], british: true).text == "Bread and. Then milk")
     }
 }
+
+@Suite("4.6 Spoken commands: brackets, quotes and slashes")
+struct SpokenSymbolsTests {
+    private func written(_ said: String) -> String { Tidy.dictation(said, words: [], british: true).text }
+
+    @Test func bracketsJoinTheWordsInside() {
+        #expect(written("The meeting is on Tuesday open bracket if that works close bracket and then we talk")
+            == "The meeting is on Tuesday (if that works) and then we talk")
+        #expect(written("It's cheap open square bracket citation needed close square bracket") == "It's cheap [citation needed]")
+        #expect(written("See the notes open parenthesis page two close parenthesis.") == "See the notes (page two).")
+    }
+
+    @Test func theModelsGuessesAroundBracketsGo() {
+        #expect(written("On Tuesday, open bracket, if that works, close bracket, we talk.") == "On Tuesday (if that works), we talk.")
+        #expect(written("On Tuesday open bracket if that works. Closed bracket.") == "On Tuesday (if that works).")
+    }
+
+    @Test func quotesAndSlashes() {
+        #expect(written("She said open quote hello close quote to me") == "She said \u{201C}hello\u{201D} to me")
+        #expect(written("He called it quote the plan unquote") == "He called it \u{201C}the plan\u{201D}")
+        #expect(written("He called it, quote, the plan, unquote.") == "He called it \u{201C}the plan\u{201D}.")
+        #expect(written("She said open quote hello comma close quote and left") == "She said \u{201C}hello,\u{201D} and left")
+        #expect(written("It's either and forward slash or") == "It's either and/or")
+    }
+
+    @Test func talkingAboutThemStaysAsSaid() {
+        #expect(written("You missed a close bracket here") == "You missed a close bracket here")
+        #expect(written("It was, quote unquote, fine") == "It was, quote unquote, fine")
+        #expect(written("The open brackets policy") == "The open brackets policy")
+        #expect(written("It was, quote, unquote, fine") == "It was, quote, unquote, fine")
+        #expect(written("Keep open brackets for now") == "Keep open brackets for now")
+        #expect(written("We need to start quotes for new clients") == "We need to start quotes for new clients")
+    }
+
+    @Test func saidPunctuationNextToABracketStays() {
+        #expect(written("See open bracket page two full stop close bracket") == "See (page two.)")
+        #expect(written("Note colon open bracket see below close bracket") == "Note: (see below)")
+    }
+}
+
+@Suite("4.3 Tidying: spelt-out letters and doubled marks")
+struct SpeltLettersTests {
+    @Test func lettersSaidOneByOneAreJoined() {
+        #expect(SpeltLetters.join("What the N H S has done") == "What the NHS has done")
+        #expect(SpeltLetters.join("Ask the B B C. Then go") == "Ask the BBC. Then go")
+        #expect(SpeltLetters.join("The N H S I think") == "The NHS I think")
+        #expect(SpeltLetters.join("Plan A. Then plan B.") == "Plan A. Then plan B.")
+        #expect(SpeltLetters.join("Use the U.S. one") == "Use the U.S. one")
+        #expect(SpeltLetters.join("Plan B I think") == "Plan B I think")
+        #expect(SpeltLetters.join("A T-shirt is fine") == "A T-shirt is fine")
+    }
+
+    @Test func aWordListEntryCanFixTheLettersAsHeard() {
+        let words = [WordEntry(heard: "a g p", written: "a GP")]
+        #expect(Tidy.finish("They fund the A G P appointment", words: words, british: true) == "They fund the a GP appointment")
+    }
+
+    @Test func doubledMarksBecomeOne() {
+        #expect(DoubledMarks.remove(from: "consistency issues., and the app") == "consistency issues, and the app")
+        #expect(DoubledMarks.remove(from: "take out the ums.. fix it") == "take out the ums. fix it")
+        #expect(DoubledMarks.remove(from: "Is it done?.") == "Is it done?")
+        #expect(DoubledMarks.remove(from: "Hello,.") == "Hello.")
+        #expect(DoubledMarks.remove(from: "Hello,. and then we go") == "Hello, and then we go")
+        #expect(DoubledMarks.remove(from: "The answer was no., and we left") == "The answer was no, and we left")
+    }
+
+    @Test func ellipsesAndAbbreviationsStay() {
+        for text in ["Well... maybe", "Pens, etc., and so on", "Fruit, e.g., apples", "Wait...", "Hmm..., fine"] {
+            #expect(DoubledMarks.remove(from: text) == text)
+        }
+    }
+}
