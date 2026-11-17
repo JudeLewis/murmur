@@ -5,6 +5,7 @@ Live work only. Finished items move to archive/.
 ## Now
 
 - [ ] Jude tries the AI tidy-up (17 Nov 2026) for a few days: note anything it gets wrong, and words to add to the word list. If Apple's model isn't good enough, the fallback is Qwen 3.5 4B on the Mac (docs/architecture.md, AI tidy-up).
+- [ ] Watch Apple's model: it was "not ready" twice on 17 Nov 2026, first while it downloaded after the macOS 27 update, then because Claude's test downloads filled the disk (fixed). The menu now says when it's missing. If it keeps dropping out, build the Qwen 3.5 4B backup.
 - [ ] iPhone: the AI tidy-up in the app, once the Mac version has proved itself (needs iOS 27's model on the phone).
 
 ## Ideas, not started

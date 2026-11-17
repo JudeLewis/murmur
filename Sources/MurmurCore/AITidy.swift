@@ -38,6 +38,7 @@ public enum AITidy {
          "Can we meet at 3:30 on 21 March? It costs £50."),
         ("I ran five kilometres in twenty five minutes and one of my friends came too",
          "I ran 5 km in 25 minutes and one of my friends came too."),
+        ("are you free after six we've lived here for three years now", "Are you free after 6? We've lived here for three years now."),
         ("hey are you free tonight I was going to cook dinner but its fine if not",
          "Hey, are you free tonight? I was going to cook dinner, but it's fine if not."),
         ("we need to by some more chairs and the the tables for the party there coming at six",
