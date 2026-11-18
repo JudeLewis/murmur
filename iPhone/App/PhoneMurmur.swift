@@ -39,6 +39,16 @@ final class PhoneMurmur {
     var fixCorrections: Bool { didSet { defaults.set(fixCorrections, forKey: "fixCorrections") } }
     /// Quiet recordings made louder before the model hears them (SPEC.md 3.4).
     var whisper: Bool { didSet { defaults.set(whisper, forKey: "whisper") } }
+    /// The AI tidy-up (SPEC.md 4.11) or Type as I speak on the keyboard (9.4): ticking one unticks the other.
+    var aiTidy: Bool {
+        get { mode.aiTidy }
+        set { mode.setAITidy(newValue); saveMode() }
+    }
+    var typeAsISpeak: Bool {
+        get { mode.typeAsISpeak }
+        set { mode.setTypeAsISpeak(newValue); saveMode() }
+    }
+    private var mode: WritingMode
     /// The word list and snippets screens.
     @ObservationIgnored private(set) lazy var words = WordsModel(
         words: WordList.parse(defaults.string(forKey: "words") ?? WordList.template),
@@ -65,6 +75,12 @@ final class PhoneMurmur {
     /// Intelligence about `selection` (nil when nothing was selected).
     private var command = false
     private var selection: String?
+    /// The text before the cursor when the keyboard's Talk was tapped (SPEC.md 4.12).
+    private var before: String?
+    /// Type as I speak (SPEC.md 9.4): the words heard so far, and the reading every second.
+    private var live = LiveTranscript()
+    private var liveText: LiveText?
+    @ObservationIgnored private var liveLoop: Task<Void, Never>?
     /// Checked when the app opens and comes back on screen, not every publish.
     private var aiAvailable = OnDeviceAI.isAvailable
     /// Only the newest model load may say the model is ready.
@@ -78,7 +94,9 @@ final class PhoneMurmur {
     init() {
         defaults.register(defaults: [
             "tidy": true, "british": true, "fixCorrections": true, "whisper": false, "words": WordList.template,
+            "aiTidy": true, "typeAsISpeak": false,
         ])
+        mode = WritingMode(aiTidy: defaults.bool(forKey: "aiTidy"), typeAsISpeak: defaults.bool(forKey: "typeAsISpeak"))
         tidy = defaults.bool(forKey: "tidy")
         british = defaults.bool(forKey: "british")
         fixCorrections = defaults.bool(forKey: "fixCorrections")
@@ -293,11 +311,17 @@ final class PhoneMurmur {
         }
     }
 
+    private func saveMode() {
+        defaults.set(mode.aiTidy, forKey: "aiTidy")
+        defaults.set(mode.typeAsISpeak, forKey: "typeAsISpeak")
+    }
+
     private func answerKeyboard() {
         let request = store?.request()
         guard KeyboardLink.isNew(request, lastAnswered: lastRequest), let request else { return }
         lastRequest = request.id
         trace("keyboard asked to \(request.kind.rawValue)")
+        store?.forgetBefore(of: request.id)
         guard sessionOn else { return }
         if request.kind == .turnOff {
             endSession("turned off from the keyboard")
@@ -308,9 +332,10 @@ final class PhoneMurmur {
         switch flow.handle(request.kind) {
         case .startRecording:
             startRecording(id: request.id, casual: request.casual ?? false,
-                           command: request.kind == .command, selection: request.selection)
+                           command: request.kind == .command, selection: request.selection, before: request.before)
         case .stopAndTranscribe: stopAndWrite()
         case .cancelRecording:
+            stopLive()
             _ = mic.endCapture()
             longestRecording?.invalidate()
             levelTimer?.invalidate()
@@ -322,12 +347,17 @@ final class PhoneMurmur {
         }
     }
 
-    private func startRecording(id: Int, casual: Bool, command: Bool, selection: String?) {
+    private func startRecording(id: Int, casual: Bool, command: Bool, selection: String?, before: String? = nil) {
         mic.beginCapture()
         recording = id
         self.casual = casual
         self.command = command
         self.selection = command ? selection : nil
+        self.before = command ? nil : before
+        stopLive()
+        if aiTidy, !command { OnDeviceAI.warmUpTidy(british: british) }
+        // Only for the keyboard: the app's own Talk button has nowhere to type.
+        if typeAsISpeak, !command, id != 0 { startLive(id: id) }
         result = nil
         note = nil
         session.used(at: .now)
@@ -348,6 +378,51 @@ final class PhoneMurmur {
         publish()
     }
 
+    // MARK: Type as I speak (SPEC.md 9.4)
+
+    /// Reads the whole recording again about once a second, as the Mac does, and tells the
+    /// keyboard the words so far.
+    private func startLive(id: Int) {
+        live = LiveTranscript()
+        liveText = nil
+        liveLoop = Task { [weak self] in
+            var samples: [Float] = []
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, !Task.isCancelled, self.flow.phase == .recording, self.recording == id else { return }
+                samples += self.mic.heard(from: samples.count)
+                let rate = self.mic.sampleRate
+                guard rate > 0, samples.count > Int(rate) else { continue }
+                guard let words = await self.readLive(samples, sampleRate: rate), !Task.isCancelled, self.recording == id else { continue }
+                if self.live.heard(words, now: Double(samples.count) / rate) {
+                    self.liveText = LiveText(id: id, text: self.shapeLive().text)
+                    self.publish()
+                }
+            }
+        }
+    }
+
+    /// The words in a recording so far, with the Whisper boost if it's on (SPEC.md 3.4). Loudness
+    /// isn't used on the phone, so the boost needn't be taken off again.
+    private func readLive(_ samples: [Float], sampleRate: Double) async -> [HeardWord]? {
+        let whisper = whisper
+        let audio = whisper ? await Task.detached { Loudness.boosted(samples, maxGain: Loudness.whisperGain) }.value : samples
+        return try? await transcriber.words(audio, sampleRate: sampleRate, model: model)
+    }
+
+    private func stopLive() {
+        liveLoop?.cancel()
+        liveLoop = nil
+        liveText = nil
+    }
+
+    /// The live words as they'd be written: tidied by the fixed rules, without the AI.
+    private func shapeLive() -> Dictation {
+        let words = self.words.rows.compactMap(\.entry)
+        return Tidy.dictation(
+            model.withoutFillers(live.text), words: words, snippets: self.words.snippets, british: british, casual: casual, before: before)
+    }
+
     /// Call after `flow` has moved to transcribing.
     private func stopAndWrite() {
         longestRecording?.invalidate()
@@ -364,6 +439,13 @@ final class PhoneMurmur {
         let selection = selection
         let fixOn = fixCorrections
         let whisper = whisper
+        let before = before
+        let tidyOn = aiTidy
+        let typedLive = liveLoop != nil
+        let protected = tidyOn ? AITidy.protected(snippets: snippets, words: words, british: british) : []
+        let liveLoop = self.liveLoop
+        self.liveLoop = nil
+        liveLoop?.cancel()
         trace("writing \(samples.count / max(1, Int(sampleRate))) seconds")
         publish()
         // If the session ends now (a phone call), iOS would pause the app
@@ -371,6 +453,28 @@ final class PhoneMurmur {
         let background = UIApplication.shared.beginBackgroundTask(withName: "Writing a dictation")
         Task {
             let raw: String
+            if typedLive {
+                // A reading under way finishes first; then the whole recording once more (SPEC.md 9.4).
+                await liveLoop?.value
+                let silence = [Float](repeating: 0, count: Int(LiveTranscript.endSilence * sampleRate))
+                // Once more if it fails: otherwise the last words would be lost.
+                var final = await readLive(samples + silence, sampleRate: sampleRate)
+                if final == nil { final = await readLive(samples + silence, sampleRate: sampleRate) }
+                if let final {
+                    live.finished(final)
+                    if preparing != nil || modelProblem != nil { modelReady() }
+                } else {
+                    trace("couldn't read the last words")
+                }
+                let dictation = shapeLive()
+                // Whether any words went to the keyboard to type, so it knows part may be there already.
+                let shown = !(liveText?.text.isEmpty ?? true)
+                liveText = nil
+                let problem = final == nil ? (dictation.text.isEmpty ? "Couldn't turn that into text." : "Couldn't write the last few words.") : nil
+                finish(PhoneResult(id: id, text: dictation.text, problem: problem, pressEnter: dictation.pressEnter, typedLive: shown))
+                UIApplication.shared.endBackgroundTask(background)
+                return
+            }
             do {
                 // Off the main thread: a long recording is millions of samples.
                 let audio = whisper ? await Task.detached { Loudness.boosted(samples, maxGain: Loudness.whisperGain) }.value : samples
@@ -386,18 +490,33 @@ final class PhoneMurmur {
                 finish(await answer(instruction, about: selection, id: id, words: words, british: british))
             } else {
                 let triggers = snippets.map(\.trigger)
-                let dictation = await Tidy.dictation(raw, words: words, snippets: snippets, british: british, casual: casual) { [weak self] finished in
-                    guard fixOn else { return nil }
-                    do {
-                        guard let fixed = try await OnDeviceAI.fixSelfCorrection(in: finished, keeping: triggers) else { return nil }
-                        await self?.trace("fixed a self-correction")
-                        return fixed
-                    } catch {
-                        let place = await self?.whereApp ?? ""
-                        await self?.trace("self-correction not fixed: \(error) (\(place))")
-                        return nil
-                    }
-                }
+                let dictation = await Tidy.dictation(
+                    model.withoutFillers(raw), words: words, snippets: snippets, british: british, casual: casual, before: before,
+                    fix: { [weak self] finished in
+                        guard fixOn else { return nil }
+                        do {
+                            guard let fixed = try await OnDeviceAI.fixSelfCorrection(in: finished, keeping: triggers) else { return nil }
+                            await self?.trace("fixed a self-correction")
+                            return fixed
+                        } catch {
+                            let place = await self?.whereApp ?? ""
+                            await self?.trace("self-correction not fixed: \(error) (\(place))")
+                            return nil
+                        }
+                    },
+                    // Punctuation, capitals and small slips (SPEC.md 4.11), as on the Mac.
+                    tidy: { [weak self] text in
+                        guard tidyOn else { return nil }
+                        do {
+                            let tidied = try await OnDeviceAI.tidy(text, keeping: protected, british: british, before: before)
+                            await self?.trace("AI tidy-up \(tidied == nil ? "left it as it was" : "used")")
+                            return tidied
+                        } catch {
+                            let place = await self?.whereApp ?? ""
+                            await self?.trace("AI tidy-up skipped: \(error) (\(place))")
+                            return nil
+                        }
+                    })
                 finish(PhoneResult(id: id, text: dictation.text, pressEnter: dictation.pressEnter))
             }
             UIApplication.shared.endBackgroundTask(background)
@@ -473,6 +592,7 @@ final class PhoneMurmur {
         status.level = flow.phase == .recording ? mic.level : nil
         status.command = command && flow.phase != .idle ? true : nil
         status.ai = aiAvailable
+        status.live = flow.phase != .idle ? liveText : nil
         store.save(status)
         if ring { Bell.ring(Bell.toKeyboard) }
     }

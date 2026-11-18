@@ -75,6 +75,13 @@ final class KeyboardTalker {
     @ObservationIgnored private var status: PhoneStatus?
     @ObservationIgnored private var wait = KeyboardWait()
     @ObservationIgnored private var lastTyped = LastTyped()
+    /// Type as I speak (SPEC.md 9.4): what's been typed for the recording being made, and the
+    /// text before the cursor when Talk was tapped.
+    @ObservationIgnored private var live = KeyboardLive()
+    @ObservationIgnored private var liveBefore: String?
+    /// The recording this keyboard started, the only one it types live; nil once it's closed.
+    @ObservationIgnored private var liveRecording: Int?
+    @ObservationIgnored private var liveStoppedNoted = 0
     /// What was selected when ✨ was tapped, so Undo can put it back.
     @ObservationIgnored private var commandSelection: String?
     @ObservationIgnored private let tapFeel = UIImpactFeedbackGenerator(style: .light)
@@ -115,6 +122,7 @@ final class KeyboardTalker {
         stopDeleting()
         // Text finishing after the keyboard has gone isn't typed anywhere (SPEC.md 9.4).
         wait.keyboardClosed()
+        liveRecording = nil
     }
 
     func refresh() {
@@ -130,7 +138,29 @@ final class KeyboardTalker {
             levels.clear()
         }
 
+        typeLive()
+
         switch wait.deliver(status?.result) {
+        case .type(let text, let pressEnter) where status?.result.map({ live.typedSome(of: $0.id) }) == true:
+            // Part of it is typed already: make what's typed match the finished text.
+            let proxy = keyboard?.textDocumentProxy
+            let target = Tidy.spaceInFront(of: text, after: liveBefore) + Tidy.forInsertion(text, pressEnter: pressEnter)
+            if let id = status?.result?.id, let edit = live.show(target, recording: id, before: proxy?.documentContextBeforeInput, final: true) {
+                apply(edit)
+            }
+            if live.stopped {
+                show("Typing stopped part way, as the cursor moved. The whole dictation is in Recent in the Murmur app.")
+                trace("live typing stopped part way")
+            } else {
+                if pressEnter { proxy?.insertText("\n") }
+                lastTyped.typed(pressEnter ? "" : target)
+                trace("typed \(text.count) characters as you spoke\(pressEnter ? ", then Return" : "")")
+            }
+        case .type where status?.result?.typedLive == true && status?.result?.id != liveRecording:
+            // Another keyboard (before it was closed) typed part of it already: typing it all
+            // here would double that part.
+            show("Part of it was typed as you spoke. The whole dictation is in Recent in the Murmur app.")
+            trace("finished text not typed: another keyboard typed part of it")
         case .type(let text, let pressEnter):
             let proxy = keyboard?.textDocumentProxy
             let typed = Tidy.forInsertion(text, after: proxy?.documentContextBeforeInput, pressEnter: pressEnter)
@@ -168,7 +198,14 @@ final class KeyboardTalker {
             if keyboard?.openMurmur() != true { show("Open the Murmur app to turn it on.") }
         case .send(let kind):
             tapFeel.impactOccurred()
-            send(KeyboardRequest(id: KeyboardRequest.newID(), kind: kind, casual: casual))
+            // The text before the cursor goes with a start (SPEC.md 4.12), for the capital and names.
+            let before = kind == .start ? keyboard?.textDocumentProxy.documentContextBeforeInput : nil
+            let request = KeyboardRequest(id: KeyboardRequest.newID(), kind: kind, casual: casual, before: before)
+            if kind == .start {
+                liveBefore = before
+                liveRecording = request.id
+            }
+            send(request)
         case .nothing:
             break
         }
@@ -224,6 +261,25 @@ final class KeyboardTalker {
         for _ in 0..<undo.delete { proxy.deleteBackward() }
         if !undo.retype.isEmpty { proxy.insertText(undo.retype) }
         trace(undo.retype.isEmpty ? "undid a dictation" : "undid a command, selected text put back")
+    }
+
+    /// Type as I speak (SPEC.md 9.4): the words so far, typed and corrected as the app hears more.
+    private func typeLive() {
+        // Only the keyboard that started this recording, while it's open (SPEC.md 9.4).
+        guard let words = status?.live, words.id == liveRecording, !words.text.isEmpty, let proxy = keyboard?.textDocumentProxy else { return }
+        let target = Tidy.spaceInFront(of: words.text, after: liveBefore) + words.text
+        if let edit = live.show(target, recording: words.id, before: proxy.documentContextBeforeInput) {
+            apply(edit)
+        } else if live.stopped, liveStoppedNoted != words.id {
+            liveStoppedNoted = words.id
+            trace("live typing stopped: the cursor moved")
+        }
+    }
+
+    private func apply(_ edit: LiveEdit) {
+        guard let proxy = keyboard?.textDocumentProxy else { return }
+        for _ in 0..<edit.delete { proxy.deleteBackward() }
+        if !edit.type.isEmpty { proxy.insertText(edit.type) }
     }
 
     private func send(_ request: KeyboardRequest) {

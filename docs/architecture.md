@@ -212,6 +212,11 @@ Jude found Murmur's text poor next to Wispr Flow: words misheard, little grammar
 - **Code** (4.6, 4.7): CodeWords runs in every app with the other fixed rules ("main dot swift", "camel case user name", but not "camel case for variables"); the Code style is As said plus casual.
 - **Snippets fill in** {date}, {day}, {time}, {tomorrow} and {year}, only for a snippet that was said.
 
+## iPhone: AI tidy-up and Type as I speak on the keyboard (added 18 Nov 2026)
+
+- Jude's iPhone has iOS 27.2.1, so the app runs the same AI tidy-up as the Mac (Tidy.dictation with `tidy:`), warmed up when the keyboard's Talk is tapped. The keyboard sends `before` (documentContextBeforeInput, last 300 characters) in its start request; the app uses it like the Mac (4.12) and takes it out of request.json once read (LinkStore.forgetBefore).
+- Type as I speak: the app reads the whole recording each second (SessionMic.heard(from:) copies only the new samples; the app keeps its own copy), LiveTranscript decides which words are settled, and the shaped text goes to the keyboard in PhoneStatus.live. The keyboard's KeyboardLive turns each new text into a LiveEdit (deletes and types through textDocumentProxy), and stops for good if the text before the cursor no longer ends with what it typed. The finished PhoneResult (typedLive) is applied as one last edit with no size cap, as the cursor is checked first. Only the keyboard that sent the start types live; a reopened keyboard says the text is in Recent rather than type it again.
+
 ## Listening out for word list words: tried, not kept (17 Nov 2026)
 
 FluidAudio can check the recording for the word list's words with a second, smaller model (Parakeet CTC 110M, about 100 MB) and swap them in. Tried with FluidAudio's safer setting. On a one-minute clip it turned "MAMA" into "Murmur" but also "ums" into "Murmur", gave an ordinary word a capital, and added 2.2 seconds (0.3 to 0.5 s on short clips). The word list's fixes afterwards do the first without the others, so it was taken out.

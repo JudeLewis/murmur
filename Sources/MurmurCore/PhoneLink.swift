@@ -24,12 +24,15 @@ public struct KeyboardRequest: Codable, Equatable, Sendable {
     public var casual: Bool?
     /// Command Mode: the text selected when ✨ was tapped, if any.
     public var selection: String?
+    /// The text just before the cursor when Talk was tapped (SPEC.md 4.12): the last 300 characters.
+    public var before: String?
 
-    public init(id: Int, kind: KeyboardRequestKind, casual: Bool? = nil, selection: String? = nil) {
+    public init(id: Int, kind: KeyboardRequestKind, casual: Bool? = nil, selection: String? = nil, before: String? = nil) {
         self.id = id
         self.kind = kind
         self.casual = casual
         self.selection = selection
+        self.before = before.map { String($0.suffix(300)) }
     }
 
     public static func newID(at date: Date = .now) -> Int {
@@ -49,13 +52,18 @@ public struct PhoneResult: Codable, Equatable, Sendable {
     public var pressEnter: Bool?
     /// Command Mode's answer: it goes in place of the selected text, as it is.
     public var replacesSelection: Bool?
+    /// Type as I speak was on (SPEC.md 9.4): the keyboard may have typed part of it already.
+    public var typedLive: Bool?
 
-    public init(id: Int, text: String, problem: String? = nil, pressEnter: Bool? = nil, replacesSelection: Bool? = nil) {
+    public init(
+        id: Int, text: String, problem: String? = nil, pressEnter: Bool? = nil, replacesSelection: Bool? = nil, typedLive: Bool? = nil
+    ) {
         self.id = id
         self.text = text
         self.problem = problem
         self.pressEnter = pressEnter
         self.replacesSelection = replacesSelection
+        self.typedLive = typedLive
     }
 }
 
@@ -78,8 +86,70 @@ public struct PhoneStatus: Codable, Equatable, Sendable {
     public var command: Bool?
     /// Apple Intelligence is on, so the keyboard shows ✨.
     public var ai: Bool?
+    /// Type as I speak (SPEC.md 9.4): the words so far of the recording being made, tidied.
+    public var live: LiveText?
 
     public init() {}
+}
+
+/// The words so far of one recording, for Type as I speak on the keyboard (SPEC.md 9.4).
+public struct LiveText: Codable, Equatable, Sendable {
+    public var id: Int
+    public var text: String
+
+    public init(id: Int, text: String) {
+        self.id = id
+        self.text = text
+    }
+}
+
+/// Type as I speak on the keyboard (SPEC.md 9.4): what the keyboard has typed for the recording
+/// being made, and each change to make as the app hears more. It stops for good, leaving what's
+/// typed, if the text before the cursor no longer ends with it (you moved the cursor or typed)
+/// or a change would delete too much.
+public struct KeyboardLive: Equatable, Sendable {
+    public private(set) var recording = 0
+    public private(set) var typed = ""
+    public private(set) var stopped = false
+
+    public init() {}
+
+    /// The change that makes what's typed for `id` read `target`, or nil for none. The finished
+    /// text (`final`) may change any amount, as long as the cursor is still after what was typed.
+    public mutating func show(_ target: String, recording id: Int, before: String?, final: Bool = false) -> LiveEdit? {
+        if id != recording {
+            recording = id
+            typed = ""
+            stopped = false
+        }
+        guard !stopped else { return nil }
+        if !typed.isEmpty, !Self.stillAfter(typed, before: before ?? "") {
+            stopped = true
+            return nil
+        }
+        let edit = LiveEdit.from(typed, to: target)
+        guard !edit.isNothing else { return nil }
+        guard final || edit.isSafe(typedCount: typed.count) else {
+            stopped = true
+            return nil
+        }
+        typed = target
+        return edit
+    }
+
+    /// Whether this recording has had anything typed live.
+    public func typedSome(of id: Int) -> Bool { recording == id && !typed.isEmpty }
+
+    /// Some apps only share part of the text before the cursor (often only since the last line
+    /// break), so a shorter context counts if it's the end of what was typed: at least four
+    /// characters, or everything since the last line break. An app that shares nothing can't be
+    /// checked, so typing goes on.
+    static func stillAfter(_ typed: String, before: String) -> Bool {
+        if before.isEmpty { return true }
+        if before.count >= typed.count { return before.hasSuffix(typed) }
+        let sinceLineBreak = typed.split(separator: "\n", omittingEmptySubsequences: false).last.map(String.init) ?? typed
+        return typed.hasSuffix(before) && (before.count >= 4 || before == sinceLineBreak)
+    }
 }
 
 /// What the keyboard shows and what its Talk button does.

@@ -246,7 +246,7 @@ Styles for each app on the Mac (added 18 Nov 2026, like Wispr Flow's; before tha
 
 ### 4.11 AI tidy-up
 
-- "AI tidy-up (Apple Intelligence)" in Settings, ticked to start with. Mac only for now.
+- "AI tidy-up (Apple Intelligence)" in Settings, ticked to start with. On iPhone too since 18 Nov 2026 (iOS 27's model), in the Murmur app's Settings: the app tidies each keyboard dictation before the keyboard types it. iOS may refuse Apple Intelligence to an app in the background; then the text is typed with the fixed rules only (the trace in 9.6 says so).
 - After the speech model, Apple's on-device AI adds the punctuation, capitals and apostrophes the model left out and fixes small slips: "hey are you free tonight I was going to cook dinner" becomes "Hey, are you free tonight? I was going to cook dinner." Lists get commas, "dont" becomes "don't", a word said twice by mistake goes, and a word that was clearly misheard can be put right.
 - Numbers are written as a careful British writer would, judged from the sentence (Jude's choice, 17 Nov 2026), on top of the fixed rules in 4.3, which run before it and again on its answer: digits for times, dates, money, measurements, percentages, phone numbers and anything over ten ("after 6", "3:30", "21 March", "£50", "5 km", "20%"); words for one to ten in ordinary sentences ("two options", "one of them"); spoken times like "half three" left as words. Tested 17 Nov 2026 on 12 examples: right in 10. It sometimes writes a small number as digits ("5 years") or leaves a percentage as words ("fifteen per cent"); a phone number said digit by digit is left as said.
 - It runs on the Mac, free and offline, like the rest of Murmur. It needs Apple Intelligence on (System Settings, Apple Intelligence & Siri) and macOS 27's model (tested 17 Nov 2026).
@@ -265,7 +265,7 @@ Styles for each app on the Mac (added 18 Nov 2026, like Wispr Flow's; before tha
 
 ### 4.12 Text before the cursor
 
-- When listening starts, Murmur reads up to 300 characters just before the cursor in the app in front, as Wispr Flow does (Mac only). It's never logged or saved, and isn't read in Command Mode.
+- When listening starts, Murmur reads up to 300 characters just before the cursor in the app in front, as Wispr Flow does. It's never logged or saved, and isn't read in Command Mode. On iPhone the keyboard sends the app what iOS tells it is before the cursor, when Talk is tapped (added 18 Nov 2026); it passes through the app and keyboard's shared folder, and the app takes it out again as soon as it has read it.
 - In the middle of a sentence (after a word, a number, a comma, a semicolon, a dash or an opening bracket), the dictation goes in with a space in front, and the first word loses the capital the speech model gave it: "I'll call you" then "and then we can talk" gives "I'll call you and then we can talk.", and "milk, eggs," then "bread" gives "milk, eggs, bread". Names (spotted by Apple's NaturalLanguage, on the Mac), days, months, "I", words like "NHS" or "iPhone", and words the word list or the text before writes with a capital keep theirs. After a full stop, a line break or nothing, it starts as usual.
 - The AI tidy-up (4.11) sees the text too, only to spell names the same way and to continue the sentence. Apple's model sometimes starts its answer by repeating that text (3 times in 8 when tried, 18 Nov 2026); those words are taken off, and the rest is checked as usual.
 - With Type as I speak (2.9) the same happens, once the text before has been read (a fraction of a second).
@@ -337,7 +337,7 @@ Two parts: the Murmur app, which listens and writes, and the Murmur keyboard, wh
   - A status line: "Getting the speech model ready (42%). After an update this takes a few minutes. Keep Murmur open until it says Ready.", "Ready", or "Keyboard on. Turns off 10 minutes after your last dictation." with a "Turn off now" button.
   - A big Talk button: tap to start, tap to stop. The text shows underneath and is copied, ready to paste anywhere. If no keyboard session was on, the microphone goes off again once the text is written.
   - Recent: the last 10 dictations. Tap one to copy it.
-  - Tidy speech (drops um and er) and British spelling, both on to start with. Fix “no wait, I mean” (Apple Intelligence), on to start with (4.8), and Whisper mode (for speaking quietly), off to start with (3.4).
+  - Tidy speech (drops um and er) and British spelling, both on to start with. AI tidy-up (Apple Intelligence), on to start with (4.11), and Type as I speak (keyboard; turns AI tidy-up off), off to start with (9.4): ticking one unticks the other. Fix “no wait, I mean” (Apple Intelligence), on to start with (4.8), and Whisper mode (for speaking quietly), off to start with (3.4).
   - Word list and snippets: the same screen as the Mac's window (4.2 and 4.5). Changes work from the next dictation.
   - Setting up the keyboard: the steps in 9.5, with a button that opens Murmur's page in Settings.
 - The first time it opens, the speech model downloads (about 400 MB, best on Wi-Fi), then gets ready for the iPhone's chip. That takes one to a few minutes, and again after every update, because iOS throws away the prepared copy when the app is reinstalled. After that it is ready in under a second each time the app opens.
@@ -375,6 +375,7 @@ Two parts: the Murmur app, which listens and writes, and the Murmur keyboard, wh
 - Only the keyboard that started a dictation types it, once. If the keyboard closes before the text is ready, the text isn't typed anywhere; it's in Recent in the app.
 - If the keyboard closes while listening, Murmur keeps listening. The next time the keyboard opens it shows the moving bars; tap ✓ and the text is typed there.
 - A recording stops by itself after 15 minutes and is written out as usual.
+- **Type as I speak** (added 18 Nov 2026, off to start with, in the app's Settings): the keyboard types your words while you talk, a second or two behind, as on the Mac (2.9). The app reads the whole recording again about once a second and the keyboard types new words and corrects the last few. When you tap ✓, the keyboard makes what it typed match the finished text. If you move the cursor or type while it's going, it stops typing for that dictation, leaves what's there, and says the whole dictation is in Recent in the app. Not for the app's own Talk button or Command Mode. It needs the whole dictation for the AI tidy-up, so ticking it unticks AI tidy-up, and the "no wait, I mean" fix is off while it's on, as on the Mac. If the keyboard is closed and opened again while you talk, the new one doesn't type live; at ✓ it says the whole dictation is in Recent in the app, rather than type it on top of the part already typed. Whisper mode works with it.
 
 ### 9.5 Setting up on iPhone
 

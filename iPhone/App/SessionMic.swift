@@ -59,6 +59,12 @@ final class SessionMic {
         }
     }
 
+    /// What's been kept since the first `from` samples, still keeping (Type as I speak, SPEC.md
+    /// 9.4). Only the new part is copied, so the microphone isn't held up by a long recording.
+    func heard(from: Int) -> [Float] {
+        captured.withLock { from < $0.samples.count ? Array($0.samples[from...]) : [] }
+    }
+
     /// Stops keeping sound and hands back what was kept.
     func endCapture() -> [Float] {
         captured.withLock {

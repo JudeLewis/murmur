@@ -16,6 +16,14 @@ public struct LinkStore: Sendable {
     public func request() -> KeyboardRequest? { read("request.json") }
     public func save(_ request: KeyboardRequest) { write(request, to: "request.json") }
 
+    /// Once the app has read it, the text before the cursor comes out of the shared folder
+    /// (SPEC.md 4.12), unless the keyboard has already sent a newer request.
+    public func forgetBefore(of id: Int) {
+        guard var request = request(), request.id == id, request.before != nil else { return }
+        request.before = nil
+        save(request)
+    }
+
     /// The last dictation, for the keyboard's "again" key. Written once per
     /// dictation, not with every status, since it can be long.
     public func last() -> String? { try? String(contentsOf: folder.appending(path: "last.txt"), encoding: .utf8) }

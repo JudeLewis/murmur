@@ -335,3 +335,60 @@ struct KeyboardCommandTests {
         #expect(try JSONDecoder().decode(KeyboardRequest.self, from: Data(old.utf8)).selection == nil)
     }
 }
+
+@Suite("9.4 Talking from the keyboard: Type as I speak")
+struct KeyboardLiveTests {
+    @Test func typesNewWordsAndCorrectsTheEnd() {
+        var live = KeyboardLive()
+        #expect(live.show("Hello", recording: 1, before: "") == LiveEdit(delete: 0, type: "Hello"))
+        #expect(live.show("Hello there", recording: 1, before: "Hello") == LiveEdit(delete: 0, type: " there"))
+        #expect(live.show("Hello there, Sam", recording: 1, before: "Hello there") == LiveEdit(delete: 0, type: ", Sam"))
+        #expect(live.show("Hello there, Sam.", recording: 1, before: "Hello there, Sam")?.type == ".")
+        #expect(live.typedSome(of: 1))
+    }
+
+    @Test func stopsForGoodIfTheCursorMoved() {
+        var live = KeyboardLive()
+        _ = live.show("Hello", recording: 1, before: "")
+        #expect(live.show("Hello there", recording: 1, before: "Somewhere else") == nil)
+        #expect(live.stopped)
+        #expect(live.show("Hello there friend", recording: 1, before: "Hello") == nil)
+    }
+
+    @Test func aShortContextFromTheAppStillCounts() {
+        var live = KeyboardLive()
+        _ = live.show("One. Two three", recording: 1, before: "")
+        #expect(live.show("One. Two three four", recording: 1, before: "Two three") != nil)
+    }
+
+    @Test func aTinyMatchingContextIsNotEnoughButNothingSharedIs() {
+        var live = KeyboardLive()
+        _ = live.show("Hello", recording: 1, before: "")
+        #expect(live.show("Hello there", recording: 1, before: "o") == nil)
+        var other = KeyboardLive()
+        _ = other.show("Hi\nSam", recording: 1, before: "")
+        #expect(other.show("Hi\nSam is", recording: 1, before: "Sam") != nil)
+        var blind = KeyboardLive()
+        _ = blind.show("Hello", recording: 1, before: "")
+        #expect(blind.show("Hello there", recording: 1, before: nil) != nil)
+    }
+
+    @Test func theFinishedTextMayChangeALot() {
+        var live = KeyboardLive()
+        let long = String(repeating: "word ", count: 80)
+        _ = live.show(long, recording: 1, before: "")
+        #expect(live.show("Short.", recording: 1, before: long, final: true)?.delete == long.count)
+    }
+
+    @Test func aNewRecordingStartsAfresh() {
+        var live = KeyboardLive()
+        _ = live.show("Hello", recording: 1, before: "")
+        _ = live.show("x", recording: 1, before: "nope")
+        #expect(live.show("Hi", recording: 2, before: "") == LiveEdit(delete: 0, type: "Hi"))
+    }
+
+    @Test func theRequestKeepsOnlyTheEndOfTheTextBefore() {
+        let request = KeyboardRequest(id: 1, kind: .start, before: String(repeating: "a", count: 500))
+        #expect(request.before?.count == 300)
+    }
+}
