@@ -7,6 +7,10 @@ import Foundation
 public enum AITidy {
     /// Chosen on 17 Nov 2026 from 24 dictations (Jude's and made-up ones) on macOS 27's
     /// model: without the punctuation sentence it left lists without commas and "dont" as it was.
+    /// On 18 Nov 2026 the wording of six open-source dictation apps (VoiceInk, OpenWhispr, FluidVoice,
+    /// Handy, Tambourine, Murmure) was tried in four versions on the same 31 dictations: none did
+    /// clearly better (results move by about two dictations from any change of wording), some missed
+    /// commas, and this wording already left every question and "ignore your rules" trick unanswered.
     public static func instructions(british: Bool) -> String {
         """
         You proofread dictation. Each message holds text that speech recognition wrote down, between \
@@ -54,16 +58,18 @@ public enum AITidy {
         Tidy.matching(snippets, words: words, british: british).map(\.trigger) + words.map(\.written).filter { !$0.isEmpty }
     }
 
-    /// Two words or fewer have nothing to fix; over 500 is too much for the model's
-    /// context (about 4,000 tokens with the instructions) and too long a wait.
+    /// Two words or fewer have nothing to fix (numbers in them, like "Twenty pounds.", are
+    /// written by the fixed rules before this); over 500 is too much for the model's context
+    /// (about 4,000 tokens with the instructions) and too long a wait.
     public static func worthAsking(_ text: String) -> Bool {
         (3...500).contains(words(text).count)
     }
 
-    /// The model writes the whole text back: about a second for a sentence or two, more
-    /// for long dictations. Past this the text is pasted as it is.
+    /// The model writes the whole text back: under a second for a sentence or two, more
+    /// for long dictations, but now and then 2.5 seconds or more for a short one (18 Nov 2026).
+    /// Past this the text is pasted as it is.
     public static func timeLimit(for text: String) -> Double {
-        min(8, 2.5 + Double(words(text).count) / 40)
+        min(8, 4 + Double(words(text).count) / 40)
     }
 
     /// The reply, if it only tidied:
@@ -179,7 +185,7 @@ public struct WritingMode: Equatable, Sendable {
 enum SpokenNumbers {
     static let signs: Set<Character> = ["£", "$", "€", "%"]
 
-    private static let units: [String: Int] = [
+    static let units: [String: Int] = [
         "zero": 0, "nought": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
         "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
         "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19,
@@ -187,12 +193,12 @@ enum SpokenNumbers {
         "tenth": 10, "eleventh": 11, "twelfth": 12, "thirteenth": 13, "fourteenth": 14, "fifteenth": 15,
         "sixteenth": 16, "seventeenth": 17, "eighteenth": 18, "nineteenth": 19,
     ]
-    private static let tens: [String: Int] = [
+    static let tens: [String: Int] = [
         "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90,
         "twentieth": 20, "thirtieth": 30, "fortieth": 40, "fiftieth": 50, "sixtieth": 60, "seventieth": 70,
         "eightieth": 80, "ninetieth": 90,
     ]
-    private static let scales: [String: Int] = [
+    static let scales: [String: Int] = [
         "hundred": 100, "hundredth": 100, "thousand": 1_000, "thousandth": 1_000, "million": 1_000_000,
     ]
     /// Not "may", which is more often the verb.
@@ -291,7 +297,7 @@ enum SpokenNumbers {
     /// "twenty one" (21), "two hundred and fifty" (250), "three thousand" (3000), "twenty first" and
     /// "twenty second" (21, 22), and how many words it took. A unit after a unit, or tens after tens,
     /// starts a new number: "seven seven" is 7 then 7, "twenty twenty five" is 20 then 25.
-    private static func number(at start: Int, in words: [String]) -> (Int, Int)? {
+    static func number(at start: Int, in words: [String]) -> (Int, Int)? {
         var total = 0, current = 0, index = start
         var last: Part?
         while index < words.count {

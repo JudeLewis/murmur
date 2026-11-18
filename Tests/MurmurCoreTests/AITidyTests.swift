@@ -57,9 +57,10 @@ struct AITidyTests {
     @Test func onlyTextOfAReasonableLengthIsAsked() {
         #expect(!AITidy.worthAsking("Thanks."))
         #expect(!AITidy.worthAsking("Thank you."))
+        #expect(!AITidy.worthAsking("£20."))
         #expect(AITidy.worthAsking("Thank you all."))
         #expect(!AITidy.worthAsking(Array(repeating: "word", count: 501).joined(separator: " ")))
-        #expect(AITidy.timeLimit(for: "a short one here") < 3)
+        #expect(AITidy.timeLimit(for: "a short one here") < 4.5)
         #expect(AITidy.timeLimit(for: Array(repeating: "word", count: 500).joined(separator: " ")) == 8)
     }
 

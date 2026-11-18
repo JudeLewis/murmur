@@ -14,6 +14,7 @@ Live work only. Finished items move to archive/.
 - [ ] One microphone class for Mac and iPhone (Recorder and SessionMic are near copies; found in review, 2 Nov 2026). Left for now so the Mac app stays unchanged while the iPhone is new.
 
 - [ ] If words are still misheard after a few days of the 8 Nov fixes: try Parakeet Ultra (FluidAudio's published tests show fewer mistakes than Bark 3.0 Clean, 3.81% against 4.66%, but it keeps "um" and is a new 595 MB download).
+- [ ] From other dictation apps (researched 18 Nov 2026): lists from "one ... two ..." or "first ... second ..." (Wispr Flow, VoiceInk); emoji names like "thumbs up emoji" by a fixed list (FluidVoice); saying "literal" before a word to keep it as a word (FluidVoice); Apple's structured answers (`@Generable`) so the model can't add an introduction (Handy).
 - [ ] AI tidy-up knows the text around the cursor and the app, as Wispr Flow does, to spell names and match the tone.
 - [ ] Remove a stray comma left where a filler was dropped ("my favourite colour is, grey"). The AI tidy-up may already fix this; check in use.
 - [ ] iPhone: Type as I speak on the keyboard too, once the Mac version has been used for a while.

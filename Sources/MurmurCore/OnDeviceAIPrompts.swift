@@ -74,7 +74,8 @@ public enum CommandMode {
 public enum SelfCorrection {
     public static let instructions = """
         You clean up dictated text. If the speaker corrects themselves, remove the mistake and the \
-        correction words, keeping only what they finally meant. Otherwise return the text unchanged. \
+        correction words, keeping only what they finally meant. "Actually" or "sorry" used for emphasis or \
+        politeness is not a correction. Otherwise return the text unchanged. \
         Reply with only the text.
         Examples:
         Input: Call me at five, sorry, six o'clock.
@@ -83,6 +84,8 @@ public enum SelfCorrection {
         Output: The meeting is in Manchester.
         Input: I'll bring the cake.
         Output: I'll bring the cake.
+        Input: I actually really enjoyed the film, sorry it took me so long to say.
+        Output: I actually really enjoyed the film, sorry it took me so long to say.
         """
 
     /// Words people use to correct themselves. The model is only asked when
@@ -114,6 +117,10 @@ public enum SelfCorrection {
         let said = words(original)
         let kept = words(fixed)
         guard isInOrder(kept, within: said), kept.last == said.last else { return nil }
+        // A correction takes out the mistake too. Only correction words gone ("The flat is
+        // actually bigger" to "The flat is bigger") means it was emphasis, not a correction.
+        let gone = AITidy.differences(said, kept).removed
+        guard !gone.allSatisfy(correctionWords.contains) else { return nil }
         guard negations(kept) >= negations(said) else { return nil }
         let plainSaid = said.joined(separator: " "), plainKept = kept.joined(separator: " ")
         for phrase in commandPhrases + phrases {
@@ -131,6 +138,8 @@ public enum SelfCorrection {
     }
 
     static let commandPhrases = ["press enter", "press return", "new line", "new paragraph"]
+    /// Not "I", "no" or "or", which can be the mistake itself ("I, no wait, we should go").
+    private static let correctionWords: Set<String> = ["actually", "sorry", "mean", "wait", "rather", "correction"]
 
     private static func isInOrder(_ part: [String], within whole: [String]) -> Bool {
         var index = whole.startIndex

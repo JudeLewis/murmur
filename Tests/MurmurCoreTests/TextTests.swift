@@ -303,3 +303,89 @@ struct SpeltLettersTests {
         }
     }
 }
+
+@Suite("4.3 Tidying: numbers")
+struct WrittenNumbersTests {
+    private func written(_ said: String) -> String { WrittenNumbers.apply(to: said) }
+
+    @Test func moneyAndPercentages() {
+        #expect(written("Twenty pounds.") == "£20.")
+        #expect(written("It costs two hundred and fifty pounds a month") == "It costs £250 a month")
+        #expect(written("It costs a hundred pounds") == "It costs £100")
+        #expect(written("About fifty pence each") == "About 50p each")
+        #expect(written("We grew by fifteen percent") == "We grew by 15%")
+        #expect(written("We grew by fifteen per cent last year") == "We grew by 15% last year")
+        #expect(written("Five pounds of flour") == "Five pounds of flour")
+        #expect(written("We grew by 15 per cent last year") == "We grew by 15% last year")
+        #expect(written("It's 20 pounds each") == "It's £20 each")
+        #expect(written("It weighs 5 pounds of sugar") == "It weighs 5 pounds of sugar")
+        #expect(written("version 3.5 percent") == "version 3.5 percent")
+    }
+
+    @Test func years() {
+        #expect(written("I graduated in June twenty twenty-six.") == "I graduated in June 2026.")
+        #expect(written("We met in twenty nineteen") == "We met in 2019")
+        #expect(written("It was founded in nineteen ninety-eight") == "It was founded in 1998")
+        #expect(written("Since two thousand and five") == "Since 2005")
+    }
+
+    @Test func timesAfterAt() {
+        #expect(written("The train leaves at seven forty-five") == "The train leaves at 7:45")
+        #expect(written("See you at three thirty pm") == "See you at 3:30 pm")
+        #expect(written("Come at seven pm") == "Come at 7 pm")
+    }
+
+    @Test func overTenBecomesDigits() {
+        #expect(written("I'm thirty two now") == "I'm 32 now")
+        #expect(written("about forty minutes and two hundred staff") == "about 40 minutes and 200 staff")
+        #expect(written("two thousand five hundred people") == "2,500 people")
+        #expect(written("the twenty first century") == "the 21st century")
+        #expect(written("my eleventh birthday") == "my 11th birthday")
+    }
+
+    @Test func reviewFixes() {
+        #expect(written("I'm free from eleven thirty") == "I'm free from 11:30")
+        #expect(written("done by twelve fifteen") == "done by 12:15")
+        #expect(written("between eleven and twelve") == "between eleven and twelve")
+        #expect(written("the twenty second of March") == "the 22nd of March")
+        #expect(written("Which one am I meant to use") == "Which one am I meant to use")
+        #expect(written("See you at seven am") == "See you at 7 am")
+        #expect(written("I've lost ten pounds this month") == "I've lost ten pounds this month")
+        #expect(written("a twelve pound turkey") == "a twelve pound turkey")
+    }
+
+    @Test func snippetPhrasesWithNumbersStillMatch() {
+        let snippets = [Snippet(trigger: "eleven plus notes", text: "See the 11+ folder")]
+        #expect(Tidy.dictation("eleven plus notes", words: [], snippets: snippets, british: true).text == "See the 11+ folder")
+    }
+
+    @Test func oneToTenAndSayingsStayAsWords() {
+        for text in ["There are two options and one of them is cheaper", "Ten minutes.", "one in a million",
+                     "a hundred times better", "after six", "twenty twenty vision", "quarter past seven", "half three",
+                     "someone", "often", "a second", "two three bedroom flats"] {
+            #expect(written(text) == text)
+        }
+    }
+}
+
+@Suite("4.6 Spoken commands: email and web addresses")
+struct SpokenAddressesTests {
+    private func written(_ said: String) -> String { Tidy.dictation(said, words: [], british: true).text }
+
+    @Test func addressesAreJoinedUp() {
+        #expect(written("Email me at jude at gmail dot com please") == "Email me at jude@gmail.com please")
+        #expect(written("My email is jude dot lewis at example dot co dot uk") == "My email is jude.lewis@example.co.uk")
+        #expect(written("Have a look at bbc dot co dot uk") == "Have a look at bbc.co.uk")
+        #expect(written("Go to Google dot com.") == "Go to google.com.")
+        #expect(written("Write to sam at gmail.com") == "Write to sam@gmail.com")
+    }
+
+    @Test func ordinaryAtAndDotStay() {
+        for said in ["I'll be at home tonight", "The dot com boom", "Put a dot on the map", "Meet me at the station",
+                     "Look at the sky dot by dot"] {
+            #expect(written(said) == said)
+        }
+        #expect(written("Send it to me at gmail dot com") == "Send it to me at gmail.com")
+        #expect(written("My work email is jude at acme dot com") == "My work email is jude@acme.com")
+    }
+}

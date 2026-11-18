@@ -55,6 +55,7 @@ Sources/MurmurCore/        Plain logic, no AppKit or audio; all of it tested
   Ducking.swift            Turning music down while listening (Mac)
   OnDeviceAIPrompts.swift  Command Mode and self-correction prompts and checks; Whisper mode; ⌃⌘V; microphone choice
   AITidy.swift             AI tidy-up: the instructions for Apple's model and the check that it only tidied
+  WrittenNumbers.swift     Numbers as digits by fixed rules: money, percentages, years, times, over ten
   LiveTyping.swift         Type as I speak: which words to show, corrections, and what to delete and type
   Context.swift            Emails laid out as emails, "scratch that", and quieter voices left out
   PhoneLink.swift          iPhone: what the keyboard shows, sends and types; the 10 minute session

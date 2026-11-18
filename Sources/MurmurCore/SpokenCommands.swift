@@ -103,7 +103,7 @@ extension Tidy {
         if !text.isEmpty, let tidied = await tidy(text) {
             // The word list again, but only entries that can't change their own text ("murmur ->
             // Murmur app" would give "Murmur app app"), as the text has already been through it.
-            text = DoubledMarks.remove(from: finish(tidied, words: WordList.safeToRepeat(words), british: british))
+            text = WrittenNumbers.apply(to: DoubledMarks.remove(from: finish(tidied, words: WordList.safeToRepeat(words), british: british)))
         }
         return Dictation(
             text: layout(text, words: words, snippets: snippets, british: british, casual: casual, email: email),
@@ -122,14 +122,14 @@ extension Tidy {
     }
 
     /// "Press enter" taken off the end, then the marks: stray full stops, brackets,
-    /// spoken punctuation, doubled marks and "scratch that".
+    /// spoken punctuation, doubled marks and "scratch that"; then numbers written as digits.
     static func marks(_ finished: String, words: [WordEntry]) -> (text: String, pressEnter: Bool) {
         let (text, pressEnter) = SpokenCommands.pressEnter(in: finished)
         // Stray stops first, so a full stop you said yourself is never taken out.
         // Brackets before the other marks, so the marks they trim are only ever the model's guesses.
         let punctuated = DoubledMarks.remove(
-            from: SpokenPunctuation.apply(to: SpokenSymbols.apply(to: StrayStops.remove(from: text, keeping: words))))
-        return (ScratchThat.apply(punctuated), pressEnter)
+            from: SpokenPunctuation.apply(to: SpokenAddresses.apply(to: SpokenSymbols.apply(to: StrayStops.remove(from: text, keeping: words)))))
+        return (WrittenNumbers.apply(to: ScratchThat.apply(punctuated)), pressEnter)
     }
 
     /// Line breaks, the email layout, casual style, then snippets last so their text is never changed.
@@ -142,12 +142,14 @@ extension Tidy {
         return Snippets.apply(matching(snippets, words: words, british: british), to: result)
     }
 
-    /// Snippets with their phrases spelt as the text will be by then (British spelling
-    /// and the word list), so "my favorite color" still matches "my favourite colour".
+    /// Snippets with their phrases spelt as the text will be by then (British spelling,
+    /// the word list, addresses and numbers), so "my favorite color" still matches
+    /// "my favourite colour" and "eleven plus notes" matches "11 plus notes".
     public static func matching(_ snippets: [Snippet], words: [WordEntry], british: Bool) -> [Snippet] {
         snippets.map { snippet in
             var changed = snippet
-            changed.trigger = WordList.apply(words, to: british ? BritishSpelling.apply(to: snippet.trigger) : snippet.trigger)
+            let spelt = WordList.apply(words, to: british ? BritishSpelling.apply(to: snippet.trigger) : snippet.trigger)
+            changed.trigger = WrittenNumbers.apply(to: SpokenAddresses.apply(to: spelt))
             return changed
         }
     }

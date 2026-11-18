@@ -230,3 +230,59 @@ public enum DoubledMarks {
         characters[(index + 1)...].first { !$0.isWhitespace }?.isLowercase == true
     }
 }
+
+/// Email and web addresses said out loud (SPEC.md 4.6): "jude at gmail dot com" becomes
+/// "jude@gmail.com", "bbc dot co dot uk" becomes "bbc.co.uk". Only with a known ending
+/// (com, co.uk, org and so on), so "at" and "dot" in ordinary speech stay as words.
+public enum SpokenAddresses {
+    private static let part = "[a-z0-9]+(?:(?: dot |\\.)[a-z0-9]+)*"
+    private static let ending = "(?:co|org|ac|gov|ltd|me|net)(?: dot |\\.)uk|nhs(?: dot |\\.)net|com|org|net|io|uk|ai|dev|me|edu|app|co"
+    nonisolated(unsafe) private static let email = try? NSRegularExpression(
+        pattern: "(?<![\\p{L}\\p{N}@.])(\(part)) at (\(part))(?: dot |\\.)(\(ending))(?![\\p{L}\\p{N}])", options: [.caseInsensitive])
+    nonisolated(unsafe) private static let web = try? NSRegularExpression(
+        pattern: "(?<![\\p{L}\\p{N}@.])(\(part)) dot (\(ending))(?![\\p{L}\\p{N}])", options: [.caseInsensitive])
+    /// Words that aren't the name in an address: "send it to me at gmail dot com", "the dot com boom".
+    private static let mailProviders: Set<String> = [
+        "gmail", "googlemail", "hotmail", "outlook", "live", "icloud", "me", "mac", "yahoo", "proton", "protonmail", "pm",
+        "aol", "btinternet", "sky", "virginmedia", "fastmail", "hey", "zoho", "gmx",
+    ]
+    private static let notANname: Set<String> = ["me", "us", "him", "her", "them", "it", "you", "home", "work", "school",
+                                                "the", "a", "an", "this", "that"]
+
+    public static func apply(to text: String) -> String {
+        var result = text
+        if let email {
+            result = replace(email, in: result) { groups, before in
+                // "have a look at bbc dot co dot uk" is a website: an email needs a mail provider,
+                // or the word "email" or "address" just before it.
+                let provider = groups[1].lowercased().split(separator: " ").first.map(String.init) ?? ""
+                let saysEmail = before.suffix(40).lowercased().contains("email") || before.suffix(40).lowercased().contains("address")
+                guard !notANname.contains(groups[0].lowercased()), mailProviders.contains(provider) || saysEmail else { return nil }
+                return dotted(groups[0]) + "@" + dotted(groups[1]) + "." + dotted(groups[2])
+            }
+        }
+        if let web {
+            result = replace(web, in: result) { groups, _ in
+                guard !notANname.contains(groups[0].lowercased()) else { return nil }
+                return dotted(groups[0]) + "." + dotted(groups[1])
+            }
+        }
+        return result
+    }
+
+    private static func dotted(_ spoken: String) -> String {
+        spoken.lowercased().replacingOccurrences(of: " dot ", with: ".")
+    }
+
+    private static func replace(
+        _ regex: NSRegularExpression, in text: String, with make: ([String], Substring) -> String?
+    ) -> String {
+        var result = text
+        for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
+            let groups = (1..<match.numberOfRanges).compactMap { Range(match.range(at: $0), in: text).map { String(text[$0]) } }
+            guard let range = Range(match.range, in: result), let written = make(groups, result[..<range.lowerBound]) else { continue }
+            result.replaceSubrange(range, with: written)
+        }
+        return result
+    }
+}

@@ -153,6 +153,15 @@ struct WhisperModeTests {
 
 @Suite("4.8 Self-corrections")
 struct SelfCorrectionTests {
+    @Test func emphasisIsNotACorrection() {
+        #expect(SelfCorrection.accept(original: "The flat is actually bigger than I thought.",
+                                      fixed: "The flat is bigger than I thought.") == nil)
+        #expect(SelfCorrection.accept(original: "Sorry I'm late, the train was delayed.", fixed: "I'm late, the train was delayed.") == nil)
+        #expect(SelfCorrection.accept(original: "Let's meet at five, actually make it six.", fixed: "Let's meet at six.") != nil)
+        #expect(SelfCorrection.accept(original: "Call Tom, no wait, I mean Sarah, about it.", fixed: "Call Sarah, about it.") != nil)
+        #expect(SelfCorrection.accept(original: "I, no wait, we should go.", fixed: "We should go.") != nil)
+    }
+
     @Test func theFixComesAfterSpellingAndBeforeSnippets() async {
         let snippet = Snippet(trigger: "my email", text: "jude@example.com")
         let seen = Box()
@@ -198,8 +207,9 @@ struct SelfCorrectionTests {
     }
 
     @Test func aFixMustKeepEveryNot() {
-        #expect(SelfCorrection.accept(original: "Actually, I don't think we should go.", fixed: "I think we should go.") == nil)
-        #expect(SelfCorrection.accept(original: "Actually, I don't think we should go.", fixed: "I don't think we should go.") == "I don't think we should go.")
+        #expect(SelfCorrection.accept(original: "We should go Monday, no wait, I don't think we should go.", fixed: "I think we should go.") == nil)
+        #expect(SelfCorrection.accept(original: "We should go Monday, no wait, I don't think we should go.", fixed: "I don't think we should go.")
+            == "I don't think we should go.")
     }
 
     @Test func aFixMustKeepCommandsAndSnippetPhrases() {
