@@ -20,9 +20,9 @@ public enum Snippets {
     /// If the whole dictation is a trigger ("My email."), it becomes just the
     /// saved text, with no full stop or space added. Otherwise each trigger
     /// said inside a sentence is swapped for its text, whole words only.
-    public static func apply(_ snippets: [Snippet], to text: String) -> String {
+    public static func apply(_ snippets: [Snippet], to text: String, now: Date = .now) -> String {
         let usable = snippets.filter { !plain($0.trigger).isEmpty && !$0.text.isEmpty }
-        if let whole = usable.first(where: { plain($0.trigger) == plain(text) }) { return whole.text }
+        if let whole = usable.first(where: { plain($0.trigger) == plain(text) }) { return fill(whole.text, now: now) }
 
         // Find every trigger in the text as it was, longest first, without
         // overlaps; then swap them all at once, so one snippet's saved text is
@@ -33,12 +33,32 @@ public enum Snippets {
             guard let regex = try? NSRegularExpression(pattern: pattern(for: snippet.trigger), options: [.caseInsensitive]) else { continue }
             for match in regex.matches(in: text, range: whole)
             where !found.contains(where: { NSIntersectionRange($0.range, match.range).length > 0 }) {
-                found.append((match.range, snippet.text))
+                found.append((match.range, fill(snippet.text, now: now)))
             }
         }
         var result = text
         for (range, saved) in found.sorted(by: { $0.range.location > $1.range.location }) {
             if let swap = Range(range, in: result) { result.replaceSubrange(swap, with: saved) }
+        }
+        return result
+    }
+
+    /// Saved text that fills itself in (SPEC.md 4.5): {date} is "18 November 2026", {day}
+    /// "Wednesday", {time} "14:05", {tomorrow} "19 November 2026", {year} "2026".
+    public static func fill(_ text: String, now: Date = .now) -> String {
+        guard text.contains("{") else { return text }
+        func format(_ pattern: String, _ date: Date) -> String {
+            // Only for a snippet that was said and has a {...} in it, so making these is rare.
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_GB")
+            formatter.dateFormat = pattern
+            return formatter.string(from: date)
+        }
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: now) ?? now
+        var result = text
+        for (key, value) in [("{date}", format("d MMMM yyyy", now)), ("{day}", format("EEEE", now)), ("{time}", format("HH:mm", now)),
+                             ("{tomorrow}", format("d MMMM yyyy", tomorrow)), ("{year}", format("yyyy", now))] {
+            result = result.replacingOccurrences(of: key, with: value, options: .caseInsensitive)
         }
         return result
     }

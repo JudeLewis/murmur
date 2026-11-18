@@ -22,6 +22,7 @@ enum Settings {
             "layOutEmails": true,
             "ignoreQuieterVoices": true,
             "whisperMode": false,
+            "keepRecordings": false,
         ])
     }
 
@@ -88,6 +89,14 @@ enum Settings {
         get { defaults.bool(forKey: "ignoreQuieterVoices") }
         set { defaults.set(newValue, forKey: "ignoreQuieterVoices") }
     }
+
+    /// Keep the last 20 recordings for 7 days, for testing (SPEC.md 3.5).
+    static var keepRecordings: Bool {
+        get { defaults.bool(forKey: "keepRecordings") }
+        set { defaults.set(newValue, forKey: "keepRecordings") }
+    }
+
+    static var recordingsFolder: URL { folder.appending(path: "Recordings") }
 
     /// Boost quiet recordings (SPEC.md 3.4).
     static var whisperMode: Bool {

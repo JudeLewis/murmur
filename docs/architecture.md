@@ -203,6 +203,15 @@ Jude found Murmur's text poor next to Wispr Flow: words misheard, little grammar
 - A model not yet downloaded can't be chosen with under 11 GB free, so the download can't push the Mac under the 10 GB at which macOS removes Apple Intelligence's model.
 - Compared 18 Nov 2026 on 20 clips (10 sentences, Daniel and Samantha voices) and one 50 second clip: the same words from both, apart from names neither knew (Siobhan, Aoife); Ultra put in more punctuation itself ("Hey, are you free tonight after six?" where Bark Clean gave none) and wrote "£12,000" itself; both took under a second for 50 seconds of speech. Ultra kept an "Ah" (the voice said "Uh"). Mac voices are clean, so Jude's own voice decides the default.
 
+## The last dictation, corrections, Contacts and kept recordings (added 18 Nov 2026)
+
+- **LastDictation** (MurmurCore) holds what went in, exactly as typed or pasted. Undo (⌃⌘Z, SPEC 2.11) and "make that more formal" (2.7) both read the text before the cursor again and only delete if it still ends with the dictation; Command Mode checks again after the AI answers, as the cursor may have moved in those seconds. Key repeat is ignored, and only one undo runs at a time.
+- **Corrections** (4.2): the box the dictation went into (an AXUIElement in a `Field`) is read once, at the next dictation or after 30 seconds. LastDictation.asItStands finds the dictation's words in the box (three quarters still there, in order) and WordFix.suggest picks out the changed words; one or two changes are offered in the menu, more count as rewriting. Searched off the main thread.
+- **Names from Contacts** (4.2): each first and last name is said by `say -v Daniel` into a file and transcribed with the chosen model; NameLearning keeps a fix only if what was heard isn't an English word (NSSpellChecker) or another contact. It waits while you dictate, and reads the word list again before saving.
+- **Kept recordings** (3.5): 16-bit WAV at the microphone's rate plus a JSON note of the model and what it heard, newest 20 for 7 days, in Application Support/Murmur/Recordings. `scripts/check-recordings.sh` runs Tidy and Ultra over them. Off unless ticked; unticking deletes them.
+- **Code** (4.6, 4.7): CodeWords runs in every app with the other fixed rules ("main dot swift", "camel case user name", but not "camel case for variables"); the Code style is As said plus casual.
+- **Snippets fill in** {date}, {day}, {time}, {tomorrow} and {year}, only for a snippet that was said.
+
 ## Listening out for word list words: tried, not kept (17 Nov 2026)
 
 FluidAudio can check the recording for the word list's words with a second, smaller model (Parakeet CTC 110M, about 100 MB) and swap them in. Tried with FluidAudio's safer setting. On a one-minute clip it turned "MAMA" into "Murmur" but also "ums" into "Murmur", gave an ordinary word a capital, and added 2.2 seconds (0.3 to 0.5 s on short clips). The word list's fixes afterwards do the first without the others, so it was taken out.

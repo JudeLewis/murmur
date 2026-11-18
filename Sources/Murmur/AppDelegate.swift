@@ -1,3 +1,4 @@
+import Contacts
 import AppKit
 import CoreAudio
 import MurmurCore
@@ -48,6 +49,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// background; nil when the app doesn't say. Never logged or saved.
     private var textBeforeCursor: String?
     private var lastPasteAgain = Date.distantPast
+    /// The last dictation as it went in (SPEC.md 2.11, 2.7), and the box it went into, to read
+    /// back once for corrections (4.2).
+    private var lastDictation: LastDictation?
+    private var lastField: Field?
+    private var correctionCheck: Task<Void, Never>?
+    /// Word list fixes spotted in your corrections, offered at the top of the menu (SPEC.md 4.2).
+    private var offeredFixes: [WordEntry] = []
+    /// The AI tidy-up was skipped last time, so the pill doesn't say it again and again (SPEC.md 4.11).
+    private var aiSkippedLastTime = false
+    private var learningNames = false
+    private var undoing = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Settings.registerDefaults()
@@ -66,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         keys.onSingleTap = { [weak self] in self?.singleTap() }
         keys.onCommandHoldStarted = { [weak self] in self?.commandHoldStarted() }
         keys.onPasteAgain = { [weak self] in self?.pasteAgain() }
+        keys.onUndo = { [weak self] in self?.undoLast() }
         keys.onCursorMayMove = { [weak self] in self?.liveTyper?.cursorMayHaveMoved() }
         keys.holdToTalk = Settings.holdToTalk
         keys.commandMode = Settings.commandMode
@@ -209,6 +222,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         let front = NSWorkspace.shared.frontmostApplication
         dictatingInto = front?.bundleIdentifier
+        // Before anything new goes in, look at what happened to the last dictation (SPEC.md 4.2).
+        checkForCorrections()
         spotEmail(in: front)
         readTextBeforeCursor()
         playSound("Tink")
@@ -308,6 +323,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let live = liveTyper {
             liveTyper = nil
             let seconds = recorder.stopListening()
+            if Settings.keepRecordings {
+                let samples = recorder.heard().samples, rate = recorder.sampleRate, model = Settings.model, folder = Settings.recordingsFolder
+                Task.detached { Self.keep(samples, sampleRate: rate, model: model, heard: "(typed as you spoke)", in: folder) }
+            }
             log.notice("Recorded \(seconds, format: .fixed(precision: 1)) s, typing as you spoke")
             turnMusicBackUp()
             playSound("Pop")
@@ -343,8 +362,161 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             pill.flash("Didn't catch that.", seconds: 1.5)
         } else {
             if dictation.pressEnter { Paster.pressReturn() }
+            remember(live.typed)
             pill.hide()
         }
+    }
+
+    // MARK: The last dictation (SPEC.md 2.11, 2.7, 4.2)
+
+    /// Keeps what just went in, and the box it went into, to undo it, rewrite it, or spot
+    /// corrections to it later (once, at the next dictation or after 30 seconds).
+    private func remember(_ inserted: String) {
+        guard !inserted.isEmpty else { return }
+        lastDictation = LastDictation(text: inserted, app: dictatingInto)
+        lastField = nil
+        correctionCheck?.cancel()
+        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        correctionCheck = Task { [weak self] in
+            let field = await Task.detached { Selection.focusedField(in: pid) }.value
+            guard let self, !Task.isCancelled else { return }
+            self.lastField = field
+            try? await Task.sleep(for: .seconds(30))
+            guard !Task.isCancelled else { return }
+            self.checkForCorrections()
+        }
+    }
+
+    /// Reads the box the last dictation went into, once, and offers any word you corrected.
+    private func checkForCorrections() {
+        correctionCheck?.cancel()
+        correctionCheck = nil
+        guard let last = lastDictation, let field = lastField else { return }
+        lastField = nil
+        Task { [weak self] in
+            // Off the main thread: searching a long box can take a moment.
+            let found = await Task.detached { field.text().map(last.corrections(in:)) ?? [] }.value
+                .filter { !Settings.words().contains($0) }
+            guard let self else { return }
+            guard !found.isEmpty else { return }
+            // Never the words in the log.
+            log.notice("Spotted \(found.count) possible word list fixes")
+            self.offeredFixes = found
+            if self.flow.phase == .idle, let first = found.first {
+                self.pill.flash("Spotted a fix: \(first.heard) \u{2192} \(first.written). Add it from the menu.", seconds: 4)
+            }
+        }
+    }
+
+    @objc private func addOfferedFix(_ sender: NSMenuItem) {
+        guard let index = sender.representedObject as? Int, offeredFixes.indices.contains(index) else { return }
+        var words = Settings.words()
+        let entry = offeredFixes.remove(at: index)
+        if !words.contains(entry) { words.append(entry) }
+        Settings.saveWords(words)
+        pill.flash("Added to the word list.", seconds: 1.5)
+    }
+
+    @objc private func dismissOfferedFixes() { offeredFixes = [] }
+
+    /// Control-Command-Z or the menu: takes the last dictation out, if the cursor is still
+    /// straight after it (SPEC.md 2.11).
+    private func undoLast() {
+        guard flow.phase == .idle, !undoing else { return }
+        guard let last = lastDictation else {
+            pill.flash("Nothing to undo.", seconds: 1.5)
+            return
+        }
+        // Only one undo at a time, and only once per dictation.
+        undoing = true
+        lastDictation = nil
+        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let app = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        Task {
+            await Paster.waitForKeysUp()
+            let before = await Task.detached { Selection.textBeforeCursor(in: pid, limit: last.text.utf16.count + 20) }.value
+            defer { undoing = false }
+            guard last.app == app, let count = last.charactersToRemove(before: before) else {
+                lastDictation = last
+                log.notice("Undo: the cursor isn't after the last dictation")
+                pill.flash("Can't undo here: the cursor has moved.", seconds: 2.5)
+                return
+            }
+            Paster.deleteBackward(count)
+            lastField = nil
+            correctionCheck?.cancel()
+            log.notice("Undid the last dictation")
+        }
+    }
+
+    @objc private func undoFromMenu() { undoLast() }
+
+    // MARK: Names from Contacts (SPEC.md 4.2)
+
+    /// Says each contact's name with the Mac's voice, listens with the speech model, and adds a
+    /// fix for each name it writes differently. All on the Mac.
+    @objc private func learnNamesFromContacts() {
+        guard !learningNames else { return }
+        guard loading == .ready else {
+            pill.flash("The speech model is still getting ready. Try again in a minute.", seconds: 3)
+            return
+        }
+        learningNames = true
+        Task {
+            defer { learningNames = false }
+            let store = CNContactStore()
+            guard (try? await store.requestAccess(for: .contacts)) == true else {
+                pill.flash("Murmur isn't allowed to see Contacts. Allow it in System Settings, Privacy & Security, Contacts.", seconds: 5)
+                return
+            }
+            let contacts = await Task.detached { () -> [(given: String, family: String)] in
+                var found: [(given: String, family: String)] = []
+                let request = CNContactFetchRequest(keysToFetch: [CNContactGivenNameKey as CNKeyDescriptor, CNContactFamilyNameKey as CNKeyDescriptor])
+                try? CNContactStore().enumerateContacts(with: request) { contact, _ in found.append((contact.givenName, contact.familyName)) }
+                return found
+            }.value
+            let words = Settings.words()
+            let names = NameLearning.names(from: contacts, known: words)
+            let allNames = Set(names.map { $0.lowercased() })
+            let model = Settings.model
+            log.notice("Learning \(names.count) names from Contacts")
+            var added = 0
+            var learned: [WordEntry] = []
+            for (index, name) in names.enumerated() {
+                // A dictation goes first: wait until Murmur is free again.
+                while flow.phase != .idle { try? await Task.sleep(for: .milliseconds(500)) }
+                if index % 10 == 0 { pill.flash("Learning names from Contacts: \(index) of \(names.count)", seconds: 10) }
+                guard let samples = await Task.detached(operation: { Self.spoken(name) }).value,
+                      let heard = try? await transcriber.transcribe(samples, sampleRate: 16_000, model: model) else { continue }
+                let spellChecker = NSSpellChecker.shared
+                let isWord: (String) -> Bool = { spellChecker.checkSpelling(of: $0, startingAt: 0).location == NSNotFound }
+                if let entry = NameLearning.entry(name: name, heard: heard, isWord: isWord, names: allNames), !words.contains(entry) {
+                    learned.append(entry)
+                    added += 1
+                }
+            }
+            // Read the list again, so anything added meanwhile is kept.
+            if added > 0 {
+                var latest = Settings.words()
+                latest.append(contentsOf: learned.filter { !latest.contains($0) })
+                Settings.saveWords(latest)
+            }
+            log.notice("Added \(added) names from Contacts")
+            pill.flash(added == 0 ? "Checked \(names.count) names: the speech model already gets them right."
+                       : "Added \(added) names from Contacts. They're in the word list.", seconds: 4)
+        }
+    }
+
+    /// `name` said by the Mac's British voice, as 16 kHz samples.
+    nonisolated private static func spoken(_ name: String) -> [Float]? {
+        let file = FileManager.default.temporaryDirectory.appending(path: "murmur-name-\(UUID().uuidString).aiff")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let say = Process()
+        say.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+        say.arguments = ["-v", "Daniel", "-o", file.path, name]
+        guard (try? say.run()) != nil else { return nil }
+        say.waitUntilExit()
+        return try? Transcriber.samples(fromFile: file)
     }
 
     private func transcribe(_ samples: [Float], sampleRate: Double, command: Bool = false) {
@@ -368,6 +540,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
                 unsent = nil
                 if Settings.model == model { loading = .ready }
+                if Settings.keepRecordings, !command {
+                    let heard = raw, folder = Settings.recordingsFolder
+                    Task.detached { Self.keep(samples, sampleRate: sampleRate, model: model, heard: heard, in: folder) }
+                }
                 if command {
                     await runCommand(raw)
                 } else {
@@ -398,17 +574,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         pill.show(.working("Thinking"))
-        let selection = await Selection.read()
-        log.notice("Command Mode: \(selection == nil ? "writing new text" : "rewriting \(selection!.count) characters", privacy: .public)")
+        var selection = await Selection.read()
+        // Nothing selected, and "make that more formal": the last dictation, if the cursor is
+        // still straight after it (SPEC.md 2.7).
+        var replacingLast = 0
+        if selection == nil, LastDictation.isAboutIt(instruction), let last = lastDictation,
+           last.app == NSWorkspace.shared.frontmostApplication?.bundleIdentifier {
+            let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            let before = await Task.detached { Selection.textBeforeCursor(in: pid, limit: last.text.utf16.count + 20) }.value
+            if let count = last.charactersToRemove(before: before) {
+                selection = last.words
+                replacingLast = count
+            }
+        }
+        log.notice("Command Mode: \(replacingLast > 0 ? "rewriting the last dictation" : selection == nil ? "writing new text" : "rewriting \(selection!.count) characters", privacy: .public)")
         do {
             let text = try await OnDeviceAI.command(
-                instruction, selection: selection, words: words, british: Settings.british, addSpace: selection == nil)
+                instruction, selection: selection, words: words, british: Settings.british, addSpace: selection == nil || replacingLast > 0)
             finishCommand(problem: nil)
             var recent = Settings.recent
             recent.add(text)
             Settings.recent = recent
             await Paster.waitForKeysUp()
+            if replacingLast > 0, let last = lastDictation {
+                // The cursor may have moved while the AI thought: check again before deleting.
+                let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+                let before = await Task.detached { Selection.textBeforeCursor(in: pid, limit: last.text.utf16.count + 20) }.value
+                guard last.charactersToRemove(before: before) == replacingLast else {
+                    Paster.copy(text)
+                    pill.flash("The cursor moved, so the new version is copied. Press ⌘V to paste.", seconds: 4)
+                    return
+                }
+                Paster.deleteBackward(replacingLast)
+            }
             if Paster.paste(text) {
+                // New text can be undone or rewritten again like a dictation.
+                if selection == nil || replacingLast > 0 { remember(text) }
                 pill.hide()
             } else {
                 pill.flash("Copied. Press ⌘V to paste.", seconds: 4)
@@ -451,6 +652,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let triggers = snippets.map(\.trigger)
         let protected = AITidy.protected(snippets: snippets, words: words, british: british)
         let before = textBeforeCursor
+        let skipped = SkipNote()
         let dictation = await Tidy.dictation(
             raw, words: words, snippets: snippets, british: british, email: dictatingEmail, style: style, before: before,
             // "Monday, no wait, I mean Tuesday": the on-device AI may only take words out (SPEC.md 4.8).
@@ -467,9 +669,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     let tidied = try await OnDeviceAI.tidy(text, keeping: protected, british: british, before: before)
                     let seconds = String(format: "%.1f", Date.now.timeIntervalSince(started))
                     log.notice("AI tidy-up \(tidied == nil ? "left the text as it was" : "used", privacy: .public) after \(seconds, privacy: .public) s")
+                    await skipped.set("")
                     return tidied
                 } catch {
                     log.notice("AI tidy-up skipped: \(String(describing: error), privacy: .public)")
+                    await skipped.set(AITidy.skipNote(slow: (error as? OnDeviceAI.Problem) == .tooSlow))
                     return nil
                 }
             })
@@ -491,10 +695,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         recent.add(text)
         Settings.recent = recent
 
-        if Paster.paste(Tidy.forInsertion(text, after: before, pressEnter: dictation.pressEnter)) {
+        let inserted = Tidy.forInsertion(text, after: before, pressEnter: dictation.pressEnter)
+        if Paster.paste(inserted) {
             log.notice("Pasted")
             if dictation.pressEnter { Paster.pressReturn() }
-            pill.hide()
+            remember(inserted)
+            // Once, when the AI tidy-up was skipped, so a plain dictation isn't a mystery (SPEC.md 4.11).
+            // "" means it worked; nil means it wasn't asked (too short, or off), which changes nothing.
+            let note = await skipped.text
+            if let note, !note.isEmpty, !aiSkippedLastTime { pill.flash(note, seconds: 3) } else { pill.hide() }
+            if let note { aiSkippedLastTime = !note.isEmpty }
         } else {
             log.notice("Not allowed to paste; left on the clipboard")
             pill.flash("Copied. Press ⌘V to paste.", seconds: 4)
@@ -606,6 +816,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if loading == .failed {
             menu.addItem(item("Try loading the speech model again", #selector(retryLoad)))
         }
+        for (index, fix) in offeredFixes.enumerated() {
+            let offer = item("Add to word list: \(fix.heard) \u{2192} \(fix.written)", #selector(addOfferedFix(_:)))
+            offer.representedObject = index
+            menu.addItem(offer)
+        }
+        if !offeredFixes.isEmpty { menu.addItem(item("Not now", #selector(dismissOfferedFixes))) }
         menu.addItem(item(flow.phase == .recording ? "Stop dictation" : "Start dictation", #selector(toggleFromMenu)))
         if unsent != nil {
             menu.addItem(item("Try the last recording again", #selector(retryUnsent)))
@@ -646,7 +862,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         again.keyEquivalentModifierMask = [.control, .command]
         again.isEnabled = !Settings.recent.items.isEmpty
         menu.addItem(again)
+        let undo = item("Undo last dictation", #selector(undoFromMenu), key: "z")
+        undo.keyEquivalentModifierMask = [.control, .command]
+        undo.isEnabled = lastDictation != nil
+        menu.addItem(undo)
         menu.addItem(item("Word list and snippets…", #selector(openWords)))
+        menu.addItem(item(learningNames ? "Learning names from Contacts…" : "Learn names from Contacts…", #selector(learnNamesFromContacts)))
         menu.addItem(.separator())
 
         if let front = NSWorkspace.shared.frontmostApplication, let id = front.bundleIdentifier,
@@ -721,6 +942,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         submenu.addItem(item("British spelling", #selector(toggleBritish), on: Settings.british))
         submenu.addItem(item("Fix \u{201C}no wait, I mean\u{201D} (Apple Intelligence)", #selector(toggleFixCorrections), on: Settings.fixCorrections))
         submenu.addItem(item("Whisper mode (for speaking quietly)", #selector(toggleWhisperMode), on: Settings.whisperMode))
+        submenu.addItem(item("Keep recordings for testing (7 days)", #selector(toggleKeepRecordings), on: Settings.keepRecordings))
         submenu.addItem(.separator())
         submenu.addItem(item("Hold Fn to talk", #selector(toggleHoldToTalk), on: Settings.holdToTalk))
         submenu.addItem(item("Command Mode: hold Fn and Control", #selector(toggleCommandMode), on: Settings.commandMode))
@@ -803,6 +1025,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleFixCorrections() { Settings.fixCorrections.toggle() }
 
     @objc private func toggleWhisperMode() { Settings.whisperMode.toggle() }
+
+    @objc private func toggleKeepRecordings() {
+        Settings.keepRecordings.toggle()
+        // Turning it off deletes what was kept.
+        if !Settings.keepRecordings { try? FileManager.default.removeItem(at: Settings.recordingsFolder) }
+    }
+
+    /// Saves a recording for testing, if that's on (SPEC.md 3.5), and deletes old ones. Off the
+    /// main thread. Not Command Mode instructions.
+    nonisolated private static func keep(_ samples: [Float], sampleRate: Double, model: SpeechModel, heard: String, in folder: URL) {
+        let files = FileManager.default
+        try? files.createDirectory(at: folder, withIntermediateDirectories: true)
+        let name = KeptRecordings.name(for: .now)
+        try? KeptRecordings.wav(samples, sampleRate: Int(sampleRate)).write(to: folder.appending(path: name + ".wav"))
+        let info = ["model": model.rawValue, "heard": heard]
+        try? JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted]).write(to: folder.appending(path: name + ".json"))
+        let kept = ((try? files.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.creationDateKey])) ?? [])
+            .filter { $0.pathExtension == "wav" }
+            .map { (name: $0.deletingPathExtension().lastPathComponent,
+                    date: (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast) }
+        for old in KeptRecordings.toDelete(kept) {
+            try? files.removeItem(at: folder.appending(path: old + ".wav"))
+            try? files.removeItem(at: folder.appending(path: old + ".json"))
+        }
+    }
     @objc private func toggleTypeAsISpeak() { Settings.typeAsISpeak.toggle() }
     @objc private func toggleAITidy() { Settings.aiTidy.toggle() }
     @objc private func toggleLayOutEmails() { Settings.layOutEmails.toggle() }
@@ -861,4 +1108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Settings.setUpLoginItem = true
         try? SMAppService.mainApp.register()
     }
+}
+
+/// Why the AI tidy-up was skipped for this dictation, if it was (SPEC.md 4.11).
+actor SkipNote {
+    var text: String?
+    func set(_ value: String?) { text = value }
 }

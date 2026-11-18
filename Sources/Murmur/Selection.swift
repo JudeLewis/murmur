@@ -33,21 +33,16 @@ enum Selection {
     /// Up to 300 characters before the cursor in the app in front (SPEC.md 4.12), for the
     /// capital at the start and names. Off the main thread, as a busy app can be slow to
     /// answer; nil when the app doesn't say. Never logged or saved.
-    nonisolated static func textBeforeCursor(in pid: pid_t?) -> String? {
+    nonisolated static func textBeforeCursor(in pid: pid_t?, limit: Int = 300) -> String? {
         guard let element = focusedElement(in: pid) else { return nil }
-        var rangeValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
-              let rangeValue, CFGetTypeID(rangeValue) == AXValueGetTypeID() else { return nil }
-        var cursor = CFRange()
-        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &cursor), cursor.location > 0 else { return cursor.location == 0 ? "" : nil }
-        let length = min(300, cursor.location)
-        var wanted = CFRange(location: cursor.location - length, length: length)
-        guard let wantedValue = AXValueCreate(.cfRange, &wanted) else { return nil }
-        var text: CFTypeRef?
-        guard AXUIElementCopyParameterizedAttributeValue(
-            element, kAXStringForRangeParameterizedAttribute as CFString, wantedValue, &text) == .success else { return nil }
-        return text as? String
+        return Field(element: element).textBeforeCursor(limit: limit)
     }
+
+    /// The text box with the cursor in the app, kept to read again later (SPEC.md 4.2).
+    nonisolated static func focusedField(in pid: pid_t?) -> Field? {
+        focusedElement(in: pid).map(Field.init)
+    }
+
 
     private static func fromAccessibility() -> String? {
         // A busy app mustn't hold up the keyboard for seconds (the key watch shares this thread):
@@ -91,5 +86,37 @@ enum Selection {
         let copied = board.string(forType: .string)
         Paster.restore(saved)
         return copied
+    }
+}
+
+/// One text box in another app, through Accessibility. Its questions wait at most 0.25 seconds.
+final class Field: @unchecked Sendable {
+    let element: AXUIElement
+
+    init(element: AXUIElement) {
+        self.element = element
+    }
+
+    /// All its text, if it says and it isn't huge (a long document isn't worth searching).
+    func text() -> String? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
+              let text = value as? String, text.utf16.count < 50_000 else { return nil }
+        return text
+    }
+
+    func textBeforeCursor(limit: Int) -> String? {
+        var rangeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
+              let rangeValue, CFGetTypeID(rangeValue) == AXValueGetTypeID() else { return nil }
+        var cursor = CFRange()
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &cursor), cursor.location > 0 else { return cursor.location == 0 ? "" : nil }
+        let length = min(limit, cursor.location)
+        var wanted = CFRange(location: cursor.location - length, length: length)
+        guard let wantedValue = AXValueCreate(.cfRange, &wanted) else { return nil }
+        var text: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element, kAXStringForRangeParameterizedAttribute as CFString, wantedValue, &text) == .success else { return nil }
+        return text as? String
     }
 }

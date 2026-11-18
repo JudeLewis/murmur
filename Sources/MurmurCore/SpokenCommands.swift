@@ -136,7 +136,7 @@ extension Tidy {
         // Stray stops first, so a full stop you said yourself is never taken out.
         // Brackets before the other marks, so the marks they trim are only ever the model's guesses.
         let punctuated = DoubledMarks.remove(
-            from: SpokenPunctuation.apply(to: SpokenAddresses.apply(to: SpokenSymbols.apply(to: StrayStops.remove(from: text, keeping: words)))))
+            from: SpokenPunctuation.apply(to: CodeWords.apply(to: SpokenAddresses.apply(to: SpokenSymbols.apply(to: StrayStops.remove(from: text, keeping: words))))))
         return (WrittenNumbers.apply(to: ScratchThat.apply(punctuated)), pressEnter)
     }
 
@@ -149,7 +149,7 @@ extension Tidy {
         var result = BeforeCursor.continuing(SpokenLists.apply(to: SpokenCommands.lineBreaks(in: text)), after: before, keeping: words)
         if email { result = EmailLayout.apply(result) }
         switch style {
-        case .casual: result = Tidy.casual(result, keeping: words)
+        case .casual, .code: result = Tidy.casual(result, keeping: words)
         case .veryCasual: result = Tidy.veryCasual(result, keeping: words)
         case .normal, .asSaid: break
         }

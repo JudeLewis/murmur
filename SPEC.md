@@ -52,6 +52,7 @@ A recording stops by itself after 15 minutes and is written out as usual.
 - Hold Fn and Control together (either first, within half a second of each other) for half a second, say what you want, let go. Control pressed later, during an ordinary Fn hold, throws that dictation away (2.5). Needs Apple Intelligence, which runs on the Mac, free and offline. On iPhone: the keyboard's ✨ button (9.7).
 - With text selected: it is rewritten as asked ("make this friendlier", "turn this into bullet points", "shorter") and the new text replaces it.
 - With nothing selected: Murmur writes what you asked for ("write a polite no thanks") where the cursor is.
+- With nothing selected, an instruction about "that", "it" or "this" ("make that more formal", "translate it into French", "shorten this") rewrites your last dictation, if the cursor is still straight after it: it's taken out and the new version goes in its place. An instruction that starts with write, draft, compose, create, suggest, reply, generate, give, tell or list always writes new text ("draft a reply about it"). If the cursor has moved, it writes new text as before. Mac only.
 - The pill shows the bars while listening, then "Thinking". The reply gets British spelling and the word list; it is added to Recent.
 - Escape or another key while holding throws it away. If Apple Intelligence is off, the pill says how to turn it on. Too much text, a request the model won't do, or no answer within 20 seconds gets a short message instead. If the instruction itself couldn't be heard, the pill says to try again (it isn't kept for "Try the last recording again").
 - Replies are asked to be short and plain. Short placeholder lines the model adds anyway ("Dear [Name],", "[Your Name]") are taken out.
@@ -64,6 +65,12 @@ A recording stops by itself after 15 minutes and is written out as usual.
 - Control-Command-V pastes the last dictation again, wherever the cursor is now, for when it landed in the wrong place. Also "Paste last dictation again" in the menu.
 - Murmur keeps that shortcut for itself; the app in front doesn't see it. It waits for the keys to be let go before pasting.
 - On iPhone: the keyboard's "again" key (9.4).
+
+### 2.11 Undo the last dictation
+
+- Control-Command-Z takes out the last dictation, if the cursor is still straight after it (Mac only). Murmur reads the text before the cursor to check, then deletes it, including the space it added. Also "Undo last dictation" in the menu.
+- If you've typed or clicked somewhere since, or the app doesn't say what's before the cursor, nothing is deleted and the pill says "Can't undo here: the cursor has moved."
+- Only the last one: a second press does nothing until you dictate again. Murmur keeps the shortcut for itself.
 
 ### 2.9 Type as I speak
 
@@ -117,6 +124,12 @@ A recording stops by itself after 15 minutes and is written out as usual.
 - "Whisper mode (for speaking quietly)" in Settings, off to start with (on iPhone, in the Murmur app's Settings). Quiet recordings are made up to 20 times louder before the model hears them.
 - Tested 2 Nov 2026 with the Mac's whispering voice at 2% volume: without it "book" was heard as "put"; with it, every word was right. Normal and merely quiet speech came out the same either way, so it stays off unless you whisper (boosting silence can turn hiss into words).
 
+### 3.5 Keeping recordings for testing
+
+- "Keep recordings for testing (7 days)" in Settings, off to start with (added 18 Nov 2026, Jude's choice of 7 days). While it's on, each dictation's recording is saved on the Mac in ~/Library/Application Support/Murmur/Recordings, with what the speech model heard, so Claude can check changes (such as which speech model is best) against your real voice with `./scripts/check-recordings.sh`.
+- Only the newest 20 are kept, none older than 7 days. Not Command Mode instructions. Unticking it deletes them all.
+- They never leave the Mac and aren't in the repo.
+
 ## 4. The text that's pasted
 
 ### 4.1 British spelling
@@ -131,6 +144,8 @@ On by default. Turns American spellings into British ones from a fixed list (col
 - Matching ignores capitals, only matches whole words, and a space in the list also matches a hyphen ("clocked-in").
 - Longer entries go first. The word list goes after British spelling, so its entries always win.
 - Changes work from the next dictation.
+- **Learning from your corrections** (Mac, added 18 Nov 2026, as Wispr Flow does): after a dictation, Murmur reads the box it went into again, at the next dictation or 30 seconds later, whichever comes first. If you changed a word or two (not rewrote it), it offers each change as a fix: the pill says "Spotted a fix: Shavon → Siobhan. Add it from the menu.", and the menu has "Add to word list: Shavon → Siobhan" at the top, until the next offer. Nothing is added without a click. Only the words you changed are compared, never logged or saved. A word only added or taken out isn't offered, and more than two changes count as rewriting.
+- **Names from Contacts** (Mac, "Learn names from Contacts…" in the word list menu): Murmur asks to see your contacts, says each first and last name with the Mac's voice, and listens to it with the speech model. A name it writes differently ("Shavon" for Siobhan) becomes a fix, unless what it heard is an ordinary English word or another contact's name. Names it already gets right need nothing. It runs on the Mac and nothing is sent anywhere; the pill says how many were added, and they're in the word list to check or delete.
 
 ### 4.3 Tidying
 
@@ -163,6 +178,7 @@ On by default. Turns American spellings into British ones from a fixed list (col
 - Said inside a sentence, the phrase is swapped for the text (whole words, capitals and either kind of apostrophe ignored): "Send it to my email, please." All phrases are found first and then swapped, so one snippet's text is never changed by another.
 - Phrases get British spelling, the word list, addresses and numbers too before matching, so "my favorite color" still matches and "eleven plus notes" matches "11 plus notes".
 - Snippets come last, after British spelling, the word list and casual style, so their text is never changed.
+- Saved text can fill itself in (added 18 Nov 2026): {date} writes today's date ("18 November 2026"), {day} the day ("Wednesday"), {time} the time ("14:05"), {tomorrow} tomorrow's date and {year} the year. So a snippet "today's date" with "{date}" writes the date.
 
 ### 4.6 Spoken commands
 
@@ -178,16 +194,18 @@ On by default. Turns American spellings into British ones from a fixed list (col
 - "Press enter" (or "press return") at the very end of a dictation is not written: Murmur presses Return after the text, to send a message. Said on its own, it just presses Return. On iPhone it types a Return, which sends in apps where Return sends.
 - Only the whole words count: "new lines" or "press enter to continue" are written as said.
 - "Scratch that" takes out the sentence before it (back to the last full stop, question mark or line break): "Let's meet at three. Scratch that. Let's meet at four." becomes "Let's meet at four." It must stand on its own between punctuation, so "I need to scratch that itch" is written as said. The model sometimes writes a correction with no punctuation at all; then it counts only if the words after it start the sentence again ("Send it to tom no scratch that send it to Sarah" becomes "Send it to Sarah"). Pause briefly before and after it: said straight on, the model sometimes leaves the words out altogether (seen 3 Nov 2026), and nothing happens. With Type as I speak the sentence disappears from the screen. Within one dictation only.
+- Code (added 18 Nov 2026), in every app: a file name said with "dot" and a known ending becomes one word ("main dot swift" to "main.swift", "README dot md" to "README.md"; endings such as swift, js, ts, py, md, json, html, css, txt, sh, yml, plist, csv, pdf, png, sql). "Camel case", "snake case" or "kebab case" before up to five words joins them ("camel case user name" to "userName", "snake case max retry count" to "max_retry_count"), up to the next punctuation mark or a joining word such as "and", "to" or "in".
 
 ### 4.7 Casual style
 
 Styles for each app on the Mac (added 18 Nov 2026, like Wispr Flow's; before that, casual style was a tick per app):
 
-- The menu shows "Style in Messages: Casual" (or whichever app is in front), with a choice of four:
+- The menu shows "Style in Messages: Casual" (or whichever app is in front), with a choice of five:
   - **Normal**: capitals and full stops, tidied by the AI.
   - **Casual (no capital or full stop at the ends)**: for chats ("sounds good to me"). Question and exclamation marks stay.
   - **Very casual (small letters, no full stops)**: casual, and every word in small letters, with full stops inside made commas: "Sounds good. See you at 6." becomes "sounds good, see you at 6".
   - **As said (no AI tidy-up)**: no AI tidy-up and no "no wait" fix, so your words stay as the speech model heard them (for notes). The fixed rules (spoken punctuation, numbers, lists and so on) still apply.
+  - **Code (no AI, no capital or full stop)**: for code and the command line. No AI tidy-up and no "no wait" fix, no capital at the start and no full stop at the end. No app starts as Code: Jude's VS Code is mostly for talking to Claude.
 - In Casual and Very casual, "I", words with capitals inside (iPhone, NASA, NHS) and names in the word list keep their capitals.
 - Messages and WhatsApp start as Casual; every other app starts as Normal. A casual app ticked before 18 Nov 2026 stays Casual.
 - The app in front when listening starts decides.
@@ -243,7 +261,7 @@ Styles for each app on the Mac (added 18 Nov 2026, like Wispr Flow's; before tha
 - It takes under a second for a sentence or two (0.7 seconds on average in testing), longer for long dictations. The AI is woken when you start talking, so it's ready when you stop. It gets 4 seconds plus a second for every 40 words, up to 8 (a short one now and then took 2.5 seconds or more); if it's slower, the text is pasted as it was. Dictations of under three words or over 500 aren't sent to it (the fixed rules have already written any number in a short one: "Twenty pounds." becomes "£20.").
 - It needs the whole dictation, so it isn't used with "Type as I speak" (2.9): ticking one unticks the other. If both were ticked before this setting existed, AI tidy-up wins.
 - The pill says "Writing" while it works.
-- If Apple's model isn't there (Apple Intelligence off, or still downloading after a macOS update), the text is pasted without it and the menu item reads "AI tidy-up (waiting for Apple Intelligence)". Seen twice on 17 Nov 2026, just after the macOS 27 update.
+- If Apple's model isn't there (Apple Intelligence off, or still downloading after a macOS update), the text is pasted without it and the menu item reads "AI tidy-up (waiting for Apple Intelligence)". The pill says so once, just after the paste: "Pasted without AI tidy-up: Apple Intelligence isn't ready." (or "the AI took too long."), and not again until a tidy-up has worked. Seen twice on 17 Nov 2026, just after the macOS 27 update.
 
 ### 4.12 Text before the cursor
 
@@ -302,7 +320,8 @@ The first time Murmur runs from Applications, it turns on Open at Login. After t
 
 ## 8. Privacy
 
-- Audio stays in memory and is never saved to disk or sent anywhere.
+- Audio stays in memory and is never sent anywhere. It's only saved to disk if you tick "Keep recordings for testing" (3.5): then the last 20, for 7 days, on the Mac.
+- To spot corrections (4.2) and to undo (2.11), Murmur reads the text box a dictation went into, once. Nothing from it is saved or logged.
 - The internet is used only to download the speech models.
 - Recent dictations are kept in Murmur's settings on this Mac only.
 - Murmur's log (in the Mac's system log) holds Fn timings, modifier key codes and what Murmur did, such as "Wrote 84 characters". Never the words, and never ordinary typed keys.

@@ -14,6 +14,7 @@ final class FnKeyMonitor {
     var onHoldStarted: () -> Void = {}
     var onCommandHoldStarted: () -> Void = {}
     var onPasteAgain: () -> Void = {}
+    var onUndo: () -> Void = {}
     /// A mouse click or a key press of yours: the cursor may be somewhere else now.
     var onCursorMayMove: () -> Void = {}
     var onHoldEnded: () -> Void = {}
@@ -63,7 +64,7 @@ final class FnKeyMonitor {
     }
 
     /// Returns true when Murmur used the key itself, so it isn't passed on (Control-Command-V).
-    fileprivate func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags, time: TimeInterval) -> Bool {
+    fileprivate func handle(type: CGEventType, keyCode: Int64, flags: CGEventFlags, time: TimeInterval, repeating: Bool = false) -> Bool {
         let fnHeld = flags.contains(.maskSecondaryFn)
         let event: KeyEvent
         switch type {
@@ -84,6 +85,16 @@ final class FnKeyMonitor {
                 option: flags.contains(.maskAlternate), shift: flags.contains(.maskShift)) {
                 log.notice("Paste again shortcut")
                 onPasteAgain()
+                return true
+            }
+            if Shortcuts.isUndo(
+                keyCode: keyCode, command: flags.contains(.maskCommand), control: flags.contains(.maskControl),
+                option: flags.contains(.maskAlternate), shift: flags.contains(.maskShift)) {
+                // Held down, the key repeats: only the first press counts, so it never deletes twice.
+                if !repeating {
+                    log.notice("Undo dictation shortcut")
+                    onUndo()
+                }
                 return true
             }
             event = .keyDown(keyCode: keyCode)
@@ -147,9 +158,10 @@ private func fnTapCallback(
         let flags = event.flags
         // Not event.timestamp: on Apple silicon it counts clock ticks, not nanoseconds.
         let time = ProcessInfo.processInfo.systemUptime
+        let repeating = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
         let monitor = Unmanaged<FnKeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
         let used = MainActor.assumeIsolated {
-            monitor.handle(type: type, keyCode: keyCode, flags: flags, time: time)
+            monitor.handle(type: type, keyCode: keyCode, flags: flags, time: time, repeating: repeating)
         }
         if used { return nil }
     }

@@ -218,3 +218,52 @@ public enum Fillers {
         return out.joined(separator: " ")
     }
 }
+
+/// Words for code (SPEC.md 4.6), in every app: "main dot swift" is main.swift, and "camel case
+/// user name" is userName. File names only with a known ending, so "go dot com" is left to
+/// the web address rule and "dot dot dot" to the ellipsis.
+public enum CodeWords {
+    static let endings = [
+        "swift", "js", "ts", "tsx", "jsx", "py", "md", "json", "html", "css", "txt", "sh", "yml", "yaml", "plist",
+        "xml", "csv", "pdf", "png", "jpg", "jpeg", "rb", "rs", "java", "kt", "toml", "sql", "log", "zip", "env",
+    ]
+    nonisolated(unsafe) private static let fileName: NSRegularExpression? = try? NSRegularExpression(
+        pattern: "(?<![\\p{L}\\p{N}])([\\p{L}\\p{N}_-]+) dot (\(endings.joined(separator: "|")))(?![\\p{L}\\p{N}])", options: [.caseInsensitive])
+    nonisolated(unsafe) private static let cased: NSRegularExpression? = try? NSRegularExpression(
+        pattern: "(?<![\\p{L}\\p{N}])(camel|snake|kebab) case,? ([\\p{L}\\p{N}]+(?: [\\p{L}\\p{N}]+){0,4}?)(?=[.,;:!?]|$| (?:and|then|in|to|for|from|with|is|was)\\b)",
+        options: [.caseInsensitive])
+
+    /// Words that start an ordinary sentence about the naming style, not a name:
+    /// "I prefer camel case for variables", "snake case is fine".
+    private static let notAName: Set<String> = [
+        "for", "is", "was", "are", "and", "or", "to", "in", "with", "the", "a", "an", "of", "on", "isn't", "works", "naming", "names",
+        "style", "please", "instead", "everywhere", "here", "there", "too", "though", "but", "so", "because",
+    ]
+
+    public static func apply(to text: String) -> String {
+        var result = text
+        if let fileName {
+            for match in fileName.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed() {
+                guard let whole = Range(match.range, in: result), let name = Range(match.range(at: 1), in: result),
+                      let ending = Range(match.range(at: 2), in: result) else { continue }
+                // The ending in small letters, as files are written: "Main dot Swift" to "Main.swift".
+                result.replaceSubrange(whole, with: result[name] + "." + result[ending].lowercased())
+            }
+        }
+        guard let cased else { return result }
+        for match in cased.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed() {
+            guard let whole = Range(match.range, in: result), let kind = Range(match.range(at: 1), in: result),
+                  let words = Range(match.range(at: 2), in: result) else { continue }
+            let parts = result[words].lowercased().split(separator: " ").map(String.init)
+            guard let first = parts.first, !notAName.contains(first) else { continue }
+            let joined: String
+            switch result[kind].lowercased() {
+            case "camel": joined = parts.enumerated().map { $0.offset == 0 ? $0.element : $0.element.prefix(1).uppercased() + $0.element.dropFirst() }.joined()
+            case "snake": joined = parts.joined(separator: "_")
+            default: joined = parts.joined(separator: "-")
+            }
+            result.replaceSubrange(whole, with: joined)
+        }
+        return result
+    }
+}

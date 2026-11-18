@@ -191,6 +191,11 @@ public enum Shortcuts {
     public static func isPasteAgain(keyCode: Int64, command: Bool, control: Bool, option: Bool, shift: Bool) -> Bool {
         keyCode == 9 && command && control && !option && !shift
     }
+
+    /// Control-Command-Z takes out the last dictation (SPEC.md 2.11).
+    public static func isUndo(keyCode: Int64, command: Bool, control: Bool, option: Bool, shift: Bool) -> Bool {
+        keyCode == 6 && command && control && !option && !shift
+    }
 }
 
 /// One microphone the Mac can use.

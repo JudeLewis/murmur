@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSContactsUsageDescription</key>
+	<string>Murmur learns how the speech model hears your contacts' names, so it spells them right. Only on this Mac.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Murmur listens only while you dictate, and turns your speech into text on this Mac.</string>
 </dict>

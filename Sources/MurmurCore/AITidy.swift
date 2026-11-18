@@ -49,6 +49,11 @@ public enum AITidy {
          "We need to buy some more chairs and the tables for the party. They're coming at six."),
     ]
 
+    /// What the pill says, once, when the AI tidy-up was skipped (SPEC.md 4.11).
+    public static func skipNote(slow: Bool) -> String {
+        slow ? "Pasted without AI tidy-up: the AI took too long." : "Pasted without AI tidy-up: Apple Intelligence isn't ready."
+    }
+
     public static func prompt(_ text: String) -> String { "<dictation>\(text)</dictation>" }
 
     /// With the text before the cursor too (SPEC.md 4.12), in the message rather than the

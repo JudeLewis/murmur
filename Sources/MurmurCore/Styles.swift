@@ -10,6 +10,8 @@ public enum WritingStyle: String, CaseIterable, Sendable {
     case veryCasual
     /// No AI tidy-up and no "no wait" fix: your words as the speech model heard them, for notes.
     case asSaid
+    /// For code and the command line: no AI, no capital at the start, no full stop at the end.
+    case code
 
     public var title: String {
         switch self {
@@ -17,6 +19,7 @@ public enum WritingStyle: String, CaseIterable, Sendable {
         case .casual: "Casual (no capital or full stop at the ends)"
         case .veryCasual: "Very casual (small letters, no full stops)"
         case .asSaid: "As said (no AI tidy-up)"
+        case .code: "Code (no AI, no capital or full stop)"
         }
     }
 
@@ -27,11 +30,12 @@ public enum WritingStyle: String, CaseIterable, Sendable {
         case .casual: "Casual"
         case .veryCasual: "Very casual"
         case .asSaid: "As said"
+        case .code: "Code"
         }
     }
 
     /// Whether Apple Intelligence may tidy or fix the words.
-    public var usesAI: Bool { self != .asSaid }
+    public var usesAI: Bool { self != .asSaid && self != .code }
 }
 
 /// The style for each app, by bundle id. Apps not listed are Normal.
