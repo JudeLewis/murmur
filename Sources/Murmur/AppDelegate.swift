@@ -44,6 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var liveTyper: LiveTyper?
     /// This dictation is going into an email (SPEC.md 4.9).
     private var dictatingEmail = false
+    /// The text just before the cursor when listening started (SPEC.md 4.12), read in the
+    /// background; nil when the app doesn't say. Never logged or saved.
+    private var textBeforeCursor: String?
     private var lastPasteAgain = Date.distantPast
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -207,6 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let front = NSWorkspace.shared.frontmostApplication
         dictatingInto = front?.bundleIdentifier
         spotEmail(in: front)
+        readTextBeforeCursor()
         playSound("Tink")
         pill.show(.listening)
         if Settings.aiTidy, !commandMode { OnDeviceAI.warmUpTidy(british: Settings.british) }
@@ -246,6 +250,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// The text before the cursor (SPEC.md 4.12), read off the main thread, as a busy app
+    /// can be slow to answer. Not for Command Mode, which works on the selection instead.
+    private func readTextBeforeCursor() {
+        textBeforeCursor = nil
+        guard !commandMode, AXIsProcessTrusted() else { return }
+        let app = dictatingInto
+        Task { [weak self] in
+            let before = await Task.detached { Selection.textBeforeCursor() }.value
+            guard let self, self.flow.phase == .recording, self.dictatingInto == app else { return }
+            self.textBeforeCursor = before
+        }
+    }
+
     /// Type as I speak (SPEC.md 2.9): not for Command Mode, and only once the
     /// model is ready and Murmur may press keys; otherwise it's pasted at the end.
     private func startTypingLive() {
@@ -259,9 +276,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         liveTyper = LiveTyper(recorder: recorder, transcriber: transcriber, model: Settings.model, whisper: Settings.whisperMode, app: dictatingInto) {
             [weak self] heard in
             let kept = quiet ? QuietVoices.keep(heard) : heard
-            return Tidy.dictation(
+            let before = self?.textBeforeCursor
+            let dictation = Tidy.dictation(
                 kept.map(\.text).joined(separator: " "), words: words, snippets: snippets, british: british,
-                email: self?.dictatingEmail ?? false, style: style)
+                email: self?.dictatingEmail ?? false, style: style, before: before)
+            // A space in front in the middle of a sentence, typed with the words (SPEC.md 4.12).
+            return Dictation(text: Tidy.spaceInFront(of: dictation.text, after: before) + dictation.text, pressEnter: dictation.pressEnter)
         }
         liveTyper?.start()
     }
@@ -297,7 +317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let dictation = await live.finish()
         flow.finished()
         updateIcon()
-        let text = dictation.text
+        let text = dictation.text.trimmingCharacters(in: .whitespaces)
         log.notice("Typed \(text.count) characters as you spoke\(dictation.pressEnter ? ", then Return" : "", privacy: .public)")
         if !text.isEmpty {
             var recent = Settings.recent
@@ -306,7 +326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if live.gaveUp {
             // Part of it is typed already, so pasting it all would double that part.
-            Paster.copy(Tidy.forInsertion(text, pressEnter: dictation.pressEnter))
+            Paster.copy(Tidy.forInsertion(dictation.text, pressEnter: dictation.pressEnter))
             pill.flash("Typing stopped part way. The whole dictation is copied.", seconds: 5)
         } else if live.lostTheEnd {
             pill.flash("Couldn't write the last few words.", seconds: 4)
@@ -421,8 +441,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let british = Settings.british
         let triggers = snippets.map(\.trigger)
         let protected = AITidy.protected(snippets: snippets, words: words, british: british)
+        let before = textBeforeCursor
         let dictation = await Tidy.dictation(
-            raw, words: words, snippets: snippets, british: british, email: dictatingEmail, style: style,
+            raw, words: words, snippets: snippets, british: british, email: dictatingEmail, style: style, before: before,
             // "Monday, no wait, I mean Tuesday": the on-device AI may only take words out (SPEC.md 4.8).
             fix: { finished in
                 guard fixOn, let fixed = try? await OnDeviceAI.fixSelfCorrection(in: finished, keeping: triggers) else { return nil }
@@ -434,7 +455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard tidyOn else { return nil }
                 let started = Date.now
                 do {
-                    let tidied = try await OnDeviceAI.tidy(text, keeping: protected, british: british)
+                    let tidied = try await OnDeviceAI.tidy(text, keeping: protected, british: british, before: before)
                     let seconds = String(format: "%.1f", Date.now.timeIntervalSince(started))
                     log.notice("AI tidy-up \(tidied == nil ? "left the text as it was" : "used", privacy: .public) after \(seconds, privacy: .public) s")
                     return tidied
@@ -461,7 +482,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         recent.add(text)
         Settings.recent = recent
 
-        if Paster.paste(Tidy.forInsertion(text, pressEnter: dictation.pressEnter)) {
+        if Paster.paste(Tidy.forInsertion(text, after: before, pressEnter: dictation.pressEnter)) {
             log.notice("Pasted")
             if dictation.pressEnter { Paster.pressReturn() }
             pill.hide()

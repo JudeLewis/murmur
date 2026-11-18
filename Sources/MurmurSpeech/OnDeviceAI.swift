@@ -51,13 +51,13 @@ public enum OnDeviceAI {
     /// The AI tidy-up (SPEC.md 4.11): `text` with punctuation, capitals and small slips
     /// fixed, or nil to keep it as it is (too short or long, or the reply did more than
     /// tidy). Throws if the model is off, slow or won't answer.
-    public static func tidy(_ text: String, keeping phrases: [String], british: Bool) async throws -> String? {
+    public static func tidy(_ text: String, keeping phrases: [String], british: Bool, before: String? = nil) async throws -> String? {
         guard AITidy.worthAsking(text) else { return nil }
         guard isAvailable else { throw Problem.unavailable }
         let reply = try await respond(
-            instructions: AITidy.instructions(british: british), prompt: AITidy.prompt(text),
+            instructions: AITidy.instructions(british: british), prompt: AITidy.prompt(text, before: before),
             within: AITidy.timeLimit(for: text), exact: true)
-        guard let tidied = AITidy.accept(original: text, tidied: reply, keeping: phrases), tidied != text else { return nil }
+        guard let tidied = AITidy.accept(original: text, tidied: reply, keeping: phrases, before: before), tidied != text else { return nil }
         return tidied
     }
 

@@ -73,11 +73,11 @@ extension Tidy {
     /// all snippets, so their saved text is never changed.
     public static func dictation(
         _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false, email: Bool = false,
-        style: WritingStyle? = nil
+        style: WritingStyle? = nil, before: String? = nil
     ) -> Dictation {
         dictation(
             finished: finish(raw, words: words, british: british), words: words, snippets: snippets,
-            british: british, casual: casual, email: email, style: style)
+            british: british, casual: casual, email: email, style: style, before: before)
     }
 
     /// The same, with the "no wait, I mean" fix (SPEC.md 4.8) after British
@@ -96,7 +96,7 @@ extension Tidy {
     /// Its reply gets British spelling, the word list and the doubled-marks check again.
     public static func dictation(
         _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
-        email: Bool = false, style: WritingStyle? = nil, fix: @Sendable (String) async -> String?,
+        email: Bool = false, style: WritingStyle? = nil, before: String? = nil, fix: @Sendable (String) async -> String?,
         tidy: @Sendable (String) async -> String?
     ) async -> Dictation {
         var finished = finish(raw, words: words, british: british)
@@ -108,7 +108,8 @@ extension Tidy {
             text = WrittenNumbers.apply(to: DoubledMarks.remove(from: finish(tidied, words: WordList.safeToRepeat(words), british: british)))
         }
         return Dictation(
-            text: layout(text, words: words, snippets: snippets, british: british, style: style ?? (casual ? .casual : .normal), email: email),
+            text: layout(text, words: words, snippets: snippets, british: british, style: style ?? (casual ? .casual : .normal),
+                         email: email, before: before),
             pressEnter: pressEnter)
     }
 
@@ -116,11 +117,12 @@ extension Tidy {
     /// iPhone's "aa" switch) when given.
     public static func dictation(
         finished: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
-        email: Bool = false, style: WritingStyle? = nil
+        email: Bool = false, style: WritingStyle? = nil, before: String? = nil
     ) -> Dictation {
         let (text, pressEnter) = marks(finished, words: words)
         return Dictation(
-            text: layout(text, words: words, snippets: snippets, british: british, style: style ?? (casual ? .casual : .normal), email: email),
+            text: layout(text, words: words, snippets: snippets, british: british, style: style ?? (casual ? .casual : .normal),
+                         email: email, before: before),
             pressEnter: pressEnter)
     }
 
@@ -138,9 +140,11 @@ extension Tidy {
 
     /// Line breaks, the email layout, casual style, then snippets last so their text is never changed.
     static func layout(
-        _ text: String, words: [WordEntry], snippets: [Snippet], british: Bool, style: WritingStyle, email: Bool
+        _ text: String, words: [WordEntry], snippets: [Snippet], british: Bool, style: WritingStyle, email: Bool,
+        before: String? = nil
     ) -> String {
-        var result = SpokenLists.apply(to: SpokenCommands.lineBreaks(in: text))
+        // In the middle of a sentence ("I'll call | and then"), no capital at the start (SPEC.md 4.12).
+        var result = BeforeCursor.continuing(SpokenLists.apply(to: SpokenCommands.lineBreaks(in: text)), after: before, keeping: words)
         if email { result = EmailLayout.apply(result) }
         switch style {
         case .casual: result = Tidy.casual(result, keeping: words)

@@ -51,6 +51,36 @@ public enum AITidy {
 
     public static func prompt(_ text: String) -> String { "<dictation>\(text)</dictation>" }
 
+    /// With the text before the cursor too (SPEC.md 4.12), in the message rather than the
+    /// instructions, so the instructions (and their warmed-up session) stay the same.
+    public static func prompt(_ text: String, before: String?) -> String {
+        guard let context = BeforeCursor.context(before) else { return prompt(text) }
+        return """
+            Text already before the cursor, only for spelling names and continuing the sentence; \
+            never repeat or change it: <before_cursor>\(context)</before_cursor>
+            \(prompt(text))
+            """
+    }
+
+    /// Apple's model sometimes starts its answer with the text before the cursor (3 times in 8,
+    /// 18 Nov 2026): "Hi Aoife, Just checking" for "just checking". Those words come off when
+    /// they match the end of that text exactly and the dictation itself didn't start with them.
+    static func withoutRepeat(of context: String?, in reply: String, original: String) -> String {
+        guard let context else { return reply }
+        func plain(_ word: Substring) -> String { word.lowercased().filter { $0.isLetter || $0.isNumber } }
+        let contextWords = context.split(whereSeparator: \.isWhitespace).map(plain).filter { !$0.isEmpty }
+        let replyWords = reply.split(whereSeparator: \.isWhitespace)
+        let originalWords = original.split(whereSeparator: \.isWhitespace).map(plain)
+        for count in stride(from: min(contextWords.count, replyWords.count - 1), through: 1, by: -1) {
+            guard count >= 2 || count == contextWords.count else { break }
+            let start = replyWords.prefix(count).map(plain)
+            guard start == Array(contextWords.suffix(count)), Array(originalWords.prefix(count)) != start else { continue }
+            let rest = reply[replyWords[count].startIndex...]
+            return String(rest)
+        }
+        return reply
+    }
+
     /// What the reply must keep as it is: snippet phrases, spelt as the text spells them
     /// by then ("my favourite colour"), and the word list's own spellings, so your words
     /// always win ("pilar cyst" can't become "pilars cyst", seen 17 Nov 2026).
@@ -81,10 +111,15 @@ public enum AITidy {
     ///   digits ("six" may become "6", "three thirty" "3:30", "fifty pounds" "£50");
     /// - spoken commands and snippet phrases (`keeping`) kept, so they still work afterwards;
     /// - no line breaks added.
-    /// Anything else gives nil, and the text is used as it was.
-    public static func accept(original: String, tidied reply: String, keeping phrases: [String] = []) -> String? {
+    /// Anything else gives nil, and the text is used as it was. The text before the cursor,
+    /// if the reply starts by repeating it, is taken off first (SPEC.md 4.12).
+    public static func accept(
+        original: String, tidied reply: String, keeping phrases: [String] = [], before: String? = nil
+    ) -> String? {
         var tidied = reply.trimmingCharacters(in: .whitespacesAndNewlines)
         for extra in ["<dictation>", "</dictation>"] { tidied = tidied.replacingOccurrences(of: extra, with: "") }
+        guard !tidied.contains("<before_cursor>") else { return nil }
+        tidied = withoutRepeat(of: BeforeCursor.context(before), in: tidied, original: original)
         if tidied.lowercased().hasPrefix("output:") { tidied = String(tidied.dropFirst(7)) }
         tidied = tidied.trimmingCharacters(in: .whitespacesAndNewlines)
         if tidied.count > 1, tidied.first == "\"", tidied.last == "\"", original.first != "\"" {

@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 // Knowing what you're writing (SPEC.md 4.6, 4.9 and 4.10): emails laid out as emails,
 // "scratch that", and other people's voices left out.
@@ -232,5 +233,69 @@ public enum QuietVoices {
         }
         if !current.isEmpty { result.append(current) }
         return result
+    }
+}
+
+/// The text just before the cursor (SPEC.md 4.12), read when listening starts, as Wispr Flow
+/// does: a dictation in the middle of a sentence starts with a small letter and a space, and
+/// the AI tidy-up sees it for names.
+public enum BeforeCursor {
+    /// Small words that only have a capital because the speech model thinks a sentence starts.
+    private static let smallWords: Set<String> = [
+        "a", "an", "the", "and", "but", "or", "so", "because", "if", "when", "then", "that", "which", "who", "where",
+        "while", "although", "though", "unless", "until", "after", "before", "since", "as", "also", "just", "maybe",
+        "probably", "really", "very", "not", "to", "for", "with", "without", "from", "at", "on", "in", "into", "of", "by",
+        "about", "like", "it", "it's", "its", "this", "these", "those", "there", "their", "they", "them", "we", "you",
+        "your", "he", "she", "his", "her", "my", "our", "me", "us", "is", "are", "was", "were", "be", "been", "have",
+        "has", "had", "do", "does", "did", "can", "could", "will", "would", "should", "might", "must", "some", "any",
+        "all", "every", "each", "more", "most", "less", "even", "still", "only", "too", "how", "what", "why", "here",
+        "now", "today", "tomorrow", "yesterday", "please", "thanks", "let", "let's", "get", "go", "going", "make",
+        "see", "think", "know", "want", "need", "one", "two", "three", "anyway", "otherwise", "however",
+    ]
+
+    /// The last part of `before` to show the AI: up to 300 characters, from a word's start.
+    public static func context(_ before: String?) -> String? {
+        guard let before else { return nil }
+        let trimmed = before.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let tail = trimmed.suffix(300)
+        guard tail.count < trimmed.count, let space = tail.firstIndex(of: " ") else { return String(tail) }
+        return String(tail[tail.index(after: space)...])
+    }
+
+    /// Whether the cursor is in the middle of a sentence: after a word, a number, a comma, a
+    /// semicolon, a dash or an opening bracket, not after a full stop, a line break or nothing.
+    public static func isMidSentence(_ before: String?) -> Bool {
+        guard let last = before?.reversed().first(where: { $0 != " " && $0 != "\t" }) else { return false }
+        return last.isLetter || last.isNumber || ",;-–(".contains(last)
+    }
+
+    /// Days and months, which Apple's name spotter counts as ordinary words.
+    private static let calendarWords: Set<String> = [
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "january", "february", "march",
+        "april", "may", "june", "july", "august", "september", "october", "november", "december", "christmas", "easter",
+    ]
+
+    /// In the middle of a sentence, the first word loses the capital the speech model gave it
+    /// ("and then we left", "bread and butter"), but not a name, a day or month, "I", a word
+    /// with other capitals ("NHS", "iPhone"), or a word the word list or the text before
+    /// writes with a capital. Names are spotted by Apple's NaturalLanguage (tested 18 Nov 2026:
+    /// Sam, Aoife, Siobhan, London and Tesco all found); small everyday words never ask it.
+    public static func continuing(_ text: String, after before: String?, keeping words: [WordEntry] = []) -> String {
+        guard let before, isMidSentence(before) else { return text }
+        let word = text.prefix { $0.isLetter || $0 == "'" || $0 == "\u{2019}" }
+        let plain = word.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
+        guard let first = word.first, first.isUppercase, !word.dropFirst().contains(where: \.isUppercase) else { return text }
+        let lowered = first.lowercased() + text.dropFirst()
+        if smallWords.contains(plain) { return lowered }
+        let bare = plain.split(separator: "'").first.map(String.init) ?? plain
+        guard bare != "i", !calendarWords.contains(bare),
+              !words.contains(where: { $0.written.split(separator: " ").contains { $0.lowercased() == bare && $0.first?.isUppercase == true } }),
+              !before.split(whereSeparator: { !$0.isLetter }).contains(where: { $0.lowercased() == bare && $0.first?.isUppercase == true })
+        else { return text }
+        let tagger = NLTagger(tagSchemes: [.nameType])
+        tagger.string = text
+        let (tag, _) = tagger.tag(at: text.startIndex, unit: .word, scheme: .nameType)
+        return tag == .otherWord ? lowered : text
     }
 }

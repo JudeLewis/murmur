@@ -211,3 +211,102 @@ struct AITidyNumberTests {
         #expect(AITidy.accept(original: "oh I forgot the meeting at six", tidied: "I forgot the meeting at 6.") != nil)
     }
 }
+
+@Suite("4.12 Text before the cursor")
+struct BeforeCursorTests {
+    @Test func midSentenceIsAfterAWordOrACommaNotAFullStop() {
+        #expect(BeforeCursor.isMidSentence("I'll call you"))
+        #expect(BeforeCursor.isMidSentence("Milk, eggs, "))
+        #expect(BeforeCursor.isMidSentence("We met at (") )
+        #expect(!BeforeCursor.isMidSentence("See you soon. "))
+        #expect(!BeforeCursor.isMidSentence("Dear Sam,\n"))
+        #expect(!BeforeCursor.isMidSentence(""))
+        #expect(!BeforeCursor.isMidSentence(nil))
+    }
+
+    @Test func aSmallWordLosesItsCapitalMidSentence() {
+        #expect(BeforeCursor.continuing("And then we can talk.", after: "I'll call you") == "and then we can talk.")
+        #expect(BeforeCursor.continuing("The red one.", after: "I'd like ") == "the red one.")
+        #expect(BeforeCursor.continuing("It's fine.", after: "Honestly, ") == "it's fine.")
+    }
+
+    @Test func namesAndIKeepTheirCapitals() {
+        #expect(BeforeCursor.continuing("Sam said yes.", after: "and then") == "Sam said yes.")
+        #expect(BeforeCursor.continuing("I think so.", after: "well") == "I think so.")
+        #expect(BeforeCursor.continuing("NHS letters.", after: "the") == "NHS letters.")
+    }
+
+    @Test func anOrdinaryWordLosesItsCapitalButNotANameOrDay() {
+        #expect(BeforeCursor.continuing("Bread and some butter.", after: "We need milk, eggs, ") == "bread and some butter.")
+        #expect(BeforeCursor.continuing("Siobhan can come.", after: "and ") == "Siobhan can come.")
+        #expect(BeforeCursor.continuing("London was busy.", after: "and ") == "London was busy.")
+        #expect(BeforeCursor.continuing("Friday works.", after: "or ") == "Friday works.")
+        #expect(BeforeCursor.continuing("I'm in.", after: "so ") == "I'm in.")
+    }
+
+    @Test func aWordWrittenWithACapitalElsewhereKeepsIt() {
+        #expect(BeforeCursor.continuing("Grey said so.", after: "I asked Grey and ") == "Grey said so.")
+        let words = [WordEntry(heard: "marma", written: "Murmur")]
+        #expect(BeforeCursor.continuing("Murmur works.", after: "and ", keeping: words) == "Murmur works.")
+    }
+
+    @Test func afterAFullStopOrNothingItStartsAsUsual() {
+        #expect(BeforeCursor.continuing("And then we left.", after: "It rained. ") == "And then we left.")
+        #expect(BeforeCursor.continuing("And then we left.", after: nil) == "And then we left.")
+    }
+
+    @Test func aSpaceGoesInFrontOnlyWhenItWouldJoin() {
+        #expect(Tidy.forInsertion("and then.", after: "I'll call you") == " and then. ")
+        #expect(Tidy.forInsertion("and then.", after: "I'll call you ") == "and then. ")
+        #expect(Tidy.forInsertion("Hello.", after: "(") == "Hello. ")
+        #expect(Tidy.forInsertion("\nHello.", after: "Hi") == "\nHello. ")
+        #expect(Tidy.spaceInFront(of: "", after: "word") == "")
+    }
+
+    @Test func theWholeDictationContinuesTheSentence() {
+        let dictation = Tidy.dictation("And then we can talk.", words: [], british: true, before: "I'll call you")
+        #expect(dictation.text == "and then we can talk.")
+    }
+
+    @Test func theAISeesOnlyTheEndOfALongText() {
+        let long = String(repeating: "word ", count: 100) + "the end"
+        let context = BeforeCursor.context(long) ?? ""
+        #expect(context.count <= 300)
+        #expect(context.hasSuffix("the end"))
+        #expect(!context.hasPrefix(" "))
+        #expect(BeforeCursor.context("   ") == nil)
+        #expect(BeforeCursor.context(nil) == nil)
+    }
+
+    @Test func thePromptCarriesTheTextBeforeOnlyWhenThereIsSome() {
+        #expect(AITidy.prompt("so then", before: nil) == AITidy.prompt("so then"))
+        let prompt = AITidy.prompt("and then we talked", before: "I rang Siobhan")
+        #expect(prompt.contains("<before_cursor>I rang Siobhan</before_cursor>"))
+        #expect(prompt.hasSuffix("<dictation>and then we talked</dictation>"))
+    }
+
+    @Test func aReplyThatRepeatsTheTextBeforeIsNotUsed() {
+        #expect(AITidy.accept(original: "and then we talked", tidied: "<before_cursor>I rang</before_cursor> and then we talked") == nil)
+    }
+}
+
+@Suite("4.12 Text before the cursor: the AI's answer")
+struct BeforeCursorAnswerTests {
+    @Test func aRepeatOfTheTextBeforeComesOff() {
+        #expect(AITidy.accept(original: "just checking you got my message", tidied: "Hi Aoife, Just checking you got my message.",
+                              before: "Hi Aoife, ") == "Just checking you got my message.")
+        #expect(AITidy.accept(original: "bread and some butter", tidied: "We need milk, eggs, bread and some butter.",
+                              before: "We need milk, eggs, ") == "bread and some butter.")
+    }
+
+    @Test func wordsTheDictationReallyStartsWithStay() {
+        #expect(AITidy.accept(original: "eggs and bacon please", tidied: "Eggs and bacon, please.",
+                              before: "We need milk, eggs") == "Eggs and bacon, please.")
+    }
+
+    @Test func oneMatchingWordFromALongerTextIsNotARepeat() {
+        #expect(AITidy.withoutRepeat(of: "I said no", in: "No, I didn't.", original: "no I didn't") == "No, I didn't.")
+        #expect(AITidy.withoutRepeat(of: "We went to the park", in: "Park life was fun.", original: "the park life was fun")
+            == "Park life was fun.")
+    }
+}

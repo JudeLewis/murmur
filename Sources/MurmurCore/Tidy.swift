@@ -38,9 +38,14 @@ public enum Tidy {
     /// or punctuation there. Not after an opening bracket, quote, @, # or /.
     public static func forInsertion(_ text: String, after before: String?, pressEnter: Bool = false) -> String {
         guard !text.isEmpty else { return "" }
+        return spaceInFront(of: text, after: before) + forInsertion(text, pressEnter: pressEnter)
+    }
+
+    /// " " when `text` would otherwise join the word or punctuation just before the cursor.
+    public static func spaceInFront(of text: String, after before: String?) -> String {
         let joins = before?.last.map { $0.isLetter || $0.isNumber || ".,!?;:%)]}\u{201D}\u{2019}\u{2026}".contains($0) } ?? false
         let startsOnNewLine = text.first?.isNewline == true
-        return (joins && !startsOnNewLine ? " " : "") + forInsertion(text, pressEnter: pressEnter)
+        return joins && !startsOnNewLine && !text.isEmpty ? " " : ""
     }
 }
 

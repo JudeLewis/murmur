@@ -30,6 +30,31 @@ enum Selection {
         return title as? String
     }
 
+    /// Up to 300 characters before the cursor in the app in front (SPEC.md 4.12), for the
+    /// capital at the start and names. Off the main thread, as a busy app can be slow to
+    /// answer; nil when the app doesn't say. Never logged or saved.
+    nonisolated static func textBeforeCursor() -> String? {
+        let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, 0.25)
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
+        let element = focused as! AXUIElement
+        AXUIElementSetMessagingTimeout(element, 0.25)
+        var rangeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
+              let rangeValue, CFGetTypeID(rangeValue) == AXValueGetTypeID() else { return nil }
+        var cursor = CFRange()
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &cursor), cursor.location > 0 else { return cursor.location == 0 ? "" : nil }
+        let length = min(300, cursor.location)
+        var wanted = CFRange(location: cursor.location - length, length: length)
+        guard let wantedValue = AXValueCreate(.cfRange, &wanted) else { return nil }
+        var text: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element, kAXStringForRangeParameterizedAttribute as CFString, wantedValue, &text) == .success else { return nil }
+        return text as? String
+    }
+
     private static func fromAccessibility() -> String? {
         let system = AXUIElementCreateSystemWide()
         // A busy app mustn't hold up the keyboard for seconds (the key watch shares this thread).

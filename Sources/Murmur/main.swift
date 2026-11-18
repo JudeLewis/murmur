@@ -88,6 +88,7 @@ if let index = CommandLine.arguments.firstIndex(of: "--live"), index + 1 < Comma
 // (no casual style or email layout, which depend on the app in front), with timings.
 //   Murmur --tidy "so i was thinking we could go to the park what do you think"
 //   Murmur --tidy-file dictations.txt
+// A line "text before the cursor || dictation" tries it mid-sentence (SPEC.md 4.12).
 if let index = CommandLine.arguments.firstIndex(where: { $0 == "--tidy" || $0 == "--tidy-file" }), index + 1 < CommandLine.arguments.count {
     let arguments = CommandLine.arguments
     Task { @MainActor in
@@ -98,18 +99,21 @@ if let index = CommandLine.arguments.firstIndex(where: { $0 == "--tidy" || $0 ==
         let fixOn = Settings.fixCorrections
         let lines = arguments[index] == "--tidy" ? [arguments[index + 1]]
             : ((try? String(contentsOfFile: arguments[index + 1], encoding: .utf8)) ?? "").split(separator: "\n").map(String.init)
-        for line in lines where !line.trimmingCharacters(in: .whitespaces).isEmpty {
+        for whole in lines where !whole.trimmingCharacters(in: .whitespaces).isEmpty {
+            let parts = whole.components(separatedBy: " || ")
+            let before = parts.count == 2 ? parts[0] : nil
+            let line = parts.last ?? whole
             // As in the app: the model is woken when listening starts, a second or more before.
             OnDeviceAI.warmUpTidy(british: british)
             try? await Task.sleep(for: .seconds(1))
             let started = Date.now
             let note = Note()
             let dictation = await Tidy.dictation(
-                line, words: words, snippets: snippets, british: british,
+                line, words: words, snippets: snippets, british: british, before: before,
                 fix: { fixOn ? try? await OnDeviceAI.fixSelfCorrection(in: $0, keeping: triggers) : nil },
                 tidy: { text in
                     do {
-                        let tidied = try await OnDeviceAI.tidy(text, keeping: protected, british: british)
+                        let tidied = try await OnDeviceAI.tidy(text, keeping: protected, british: british, before: before)
                         await note.set(tidied == nil ? "kept" : "tidied")
                         return tidied
                     } catch {
@@ -117,7 +121,7 @@ if let index = CommandLine.arguments.firstIndex(where: { $0 == "--tidy" || $0 ==
                         return nil
                     }
                 })
-            print(String(format: "IN  %@\nOUT %@\n    (%@, %.1f s)\n", line, dictation.text, await note.text, Date.now.timeIntervalSince(started)))
+            print(String(format: "IN  %@\nOUT %@\n    (%@, %.1f s)\n", whole, Tidy.spaceInFront(of: dictation.text, after: before) + dictation.text, await note.text, Date.now.timeIntervalSince(started)))
         }
         exit(0)
     }
