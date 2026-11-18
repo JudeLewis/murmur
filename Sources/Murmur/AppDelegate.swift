@@ -256,10 +256,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         textBeforeCursor = nil
         guard !commandMode, AXIsProcessTrusted() else { return }
         let app = dictatingInto
+        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
         Task { [weak self] in
-            let before = await Task.detached { Selection.textBeforeCursor() }.value
+            let before = await Task.detached { Selection.textBeforeCursor(in: pid) }.value
             guard let self, self.flow.phase == .recording, self.dictatingInto == app else { return }
             self.textBeforeCursor = before
+            // Never the words: only whether it could be read, and where the cursor is.
+            let found = before == nil ? "the app didn't say" : BeforeCursor.isMidSentence(before) ? "mid-sentence" : "not mid-sentence"
+            log.notice("Text before the cursor: \(found, privacy: .public)")
         }
     }
 

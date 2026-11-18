@@ -29,6 +29,7 @@ Separate from Clocked In (~/Developer/clocked-in). Never touch that folder from 
 | try Type as I speak on a recording | `.build/debug/Murmur --live file.wav` (what would be on screen each second, how much was corrected, then the finished text and the all-at-once text) |
 | check the AI tidy-up end to end | `./scripts/check-tidy.sh` (made-up dictations through Apple's model, prints OK or NOT OK; run after a macOS update) |
 | try the AI tidy-up on any text | `.build/debug/Murmur --tidy "so i was thinking we could go to the park what do you think"` or `--tidy-file lines.txt` (each line as if the speech model wrote it, with timings) |
+| see what Murmur reads before the cursor | `.build/debug/Murmur --before` (click into a text box within 2 seconds; prints the app, the text and whether it's mid-sentence) |
 | try the on-device AI | `.build/debug/Murmur --rewrite "make this friendlier" "Send me the report."` or `--fix "Monday, no wait, I mean Tuesday."` |
 | install and run Jude's copy | `./scripts/install.sh` (build, wrap as Murmur.app, sign, copy to /Applications, open) |
 | install on Jude's iPhone | `./scripts/install-phone.sh` (build, sign, install, open; phone unlocked, plugged in or on the same Wi-Fi) |
@@ -127,6 +128,7 @@ Format: **Rule**: why it matters.
 - **The first load of each speech model takes about a minute**: macOS prepares the model for the Neural Engine once; later loads take under a second (seen 2 Nov 2026). Not a hang. After a macOS update it happens again: 2.5 minutes after the macOS 27 update (17 Nov 2026).
 - **After a macOS update, Apple's AI model isn't there for a while**: on 17 Nov 2026, just after the macOS 27 update, FoundationModels said "model not ready" for about 20 minutes while the new model downloaded (and again later from low disk space, below). The AI tidy-up, Command Mode and the "no wait" fix all skip quietly until then. Check with `./scripts/check-tidy.sh`.
 - **Keep well over 10 GB free on Jude's Mac**: on 17 Nov 2026 Claude downloaded 10 GB of test models, free space fell to 12 GB, and macOS removed Apple Intelligence's model to make room (FoundationModels: "model not ready" for over an hour), so the AI tidy-up stopped. Put big test downloads in the scratchpad and delete them as soon as the test is done; check with `df -h /`.
+- **Ask the app in front for its focused text box, not the system-wide element**: on macOS 27 the system-wide "focused element" failed every time (-25204, 18 Nov 2026), so the text before the cursor was never read and dictations mid-sentence still got a capital. Selection.focusedElement asks the app by its process id first. Check with `.build/debug/Murmur --before`.
 - **Wake Apple's model before asking it**: cold, the first answer after a pause took over the 2.5 second limit and the dictation wasn't tidied (17 Nov 2026). OnDeviceAI.warmUpTidy runs when listening starts.
 
 ## Sources of truth

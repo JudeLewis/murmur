@@ -32,6 +32,18 @@ if let index = CommandLine.arguments.firstIndex(of: "--transcribe"), index + 1 <
     dispatchMain()
 }
 
+// Test mode for the text before the cursor (SPEC.md 4.12): after 2 seconds, what Murmur can
+// read in the app in front, and whether it counts as the middle of a sentence.
+//   Murmur --before
+if CommandLine.arguments.contains("--before") {
+    Thread.sleep(forTimeInterval: 2)
+    let front = NSWorkspace.shared.frontmostApplication
+    let app = front?.bundleIdentifier ?? "?"
+    let before = Selection.textBeforeCursor(in: front?.processIdentifier)
+    print("App: \(app). Allowed to read: \(AXIsProcessTrusted()). Read: \(before.map { "\"\($0.suffix(60))\"" } ?? "nothing"). Mid-sentence: \(BeforeCursor.isMidSentence(before))")
+    exit(0)
+}
+
 // Test mode for Type as I speak (SPEC.md 2.9), without speaking or typing:
 //   Murmur --live recording.wav
 // plays the recording through it a second at a time and prints what would be

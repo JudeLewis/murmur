@@ -33,14 +33,8 @@ enum Selection {
     /// Up to 300 characters before the cursor in the app in front (SPEC.md 4.12), for the
     /// capital at the start and names. Off the main thread, as a busy app can be slow to
     /// answer; nil when the app doesn't say. Never logged or saved.
-    nonisolated static func textBeforeCursor() -> String? {
-        let system = AXUIElementCreateSystemWide()
-        AXUIElementSetMessagingTimeout(system, 0.25)
-        var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
-        let element = focused as! AXUIElement
-        AXUIElementSetMessagingTimeout(element, 0.25)
+    nonisolated static func textBeforeCursor(in pid: pid_t?) -> String? {
+        guard let element = focusedElement(in: pid) else { return nil }
         var rangeValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
               let rangeValue, CFGetTypeID(rangeValue) == AXValueGetTypeID() else { return nil }
@@ -56,19 +50,31 @@ enum Selection {
     }
 
     private static func fromAccessibility() -> String? {
-        let system = AXUIElementCreateSystemWide()
-        // A busy app mustn't hold up the keyboard for seconds (the key watch shares this thread).
-        AXUIElementSetMessagingTimeout(system, 0.25)
-        var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
-              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
+        // A busy app mustn't hold up the keyboard for seconds (the key watch shares this thread):
+        // focusedElement waits at most 0.25 seconds per question.
+        guard let element = focusedElement(in: NSWorkspace.shared.frontmostApplication?.processIdentifier) else { return nil }
         var selected: CFTypeRef?
-        let element = focused as! AXUIElement
-        AXUIElementSetMessagingTimeout(element, 0.25)
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &selected) == .success else {
             return nil
         }
         return selected as? String
+    }
+
+    /// The text box with the cursor in it. The app is asked first: asking the whole system
+    /// ("system-wide") failed every time on macOS 27 (error -25204, 18 Nov 2026), in VS Code,
+    /// the Claude app and System Settings alike, while asking the app worked.
+    nonisolated private static func focusedElement(in pid: pid_t?) -> AXUIElement? {
+        let askers = (pid.map { [AXUIElementCreateApplication($0)] } ?? []) + [AXUIElementCreateSystemWide()]
+        for asker in askers {
+            AXUIElementSetMessagingTimeout(asker, 0.25)
+            var focused: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(asker, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+                  let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { continue }
+            let element = focused as! AXUIElement
+            AXUIElementSetMessagingTimeout(element, 0.25)
+            return element
+        }
+        return nil
     }
 
     /// Some apps take a moment to copy, so this waits up to half a second for

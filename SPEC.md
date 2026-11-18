@@ -251,7 +251,7 @@ Styles for each app on the Mac (added 18 Nov 2026, like Wispr Flow's; before tha
 - In the middle of a sentence (after a word, a number, a comma, a semicolon, a dash or an opening bracket), the dictation goes in with a space in front, and the first word loses the capital the speech model gave it: "I'll call you" then "and then we can talk" gives "I'll call you and then we can talk.", and "milk, eggs," then "bread" gives "milk, eggs, bread". Names (spotted by Apple's NaturalLanguage, on the Mac), days, months, "I", words like "NHS" or "iPhone", and words the word list or the text before writes with a capital keep theirs. After a full stop, a line break or nothing, it starts as usual.
 - The AI tidy-up (4.11) sees the text too, only to spell names the same way and to continue the sentence. Apple's model sometimes starts its answer by repeating that text (3 times in 8 when tried, 18 Nov 2026); those words are taken off, and the rest is checked as usual.
 - With Type as I speak (2.9) the same happens, once the text before has been read (a fraction of a second).
-- Some apps don't say what's before the cursor (some web pages and chat apps); then the dictation goes in as before.
+- Some apps don't say what's before the cursor; then the dictation goes in as before. Murmur asks the app in front directly, as asking macOS for "whatever has focus" failed in every app on macOS 27 (18 Nov 2026). Checked in TextEdit, VS Code (Claude's panel) and the Claude app. Murmur's log says each time whether it could read it, never the words. `Murmur --before` shows what it reads in the app in front.
 
 ## 5. The pill
 
