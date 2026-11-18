@@ -201,7 +201,7 @@ Jude found Murmur's text poor next to Wispr Flow: words misheard, little grammar
 - Settings, Speech model: Tidy (Bark 3.0 Clean, the default), Ultra, or Word for word (Bark 3.0). Ultra is FluidAudio's `AsrModelVersion.ultra`, about 600 MB, with fewer word errors in FluidAudio's published tests (3.81% against 4.66% for Bark Clean).
 - Ultra keeps "um", so `SpeechModel.withoutFillers` runs Fillers.remove once on the whole text, however it was put together (all at once, quieter voices left out, Type as I speak), so commas and capitals around a filler come out the same on every path. "Ah", "hmm" and "err" stay; "ER" in capitals stays.
 - A model not yet downloaded can't be chosen with under 11 GB free, so the download can't push the Mac under the 10 GB at which macOS removes Apple Intelligence's model.
-- Which should be the default waits on a side-by-side test with `say` clips and Jude's own use.
+- Compared 18 Nov 2026 on 20 clips (10 sentences, Daniel and Samantha voices) and one 50 second clip: the same words from both, apart from names neither knew (Siobhan, Aoife); Ultra put in more punctuation itself ("Hey, are you free tonight after six?" where Bark Clean gave none) and wrote "£12,000" itself; both took under a second for 50 seconds of speech. Ultra kept an "Ah" (the voice said "Uh"). Mac voices are clean, so Jude's own voice decides the default.
 
 ## Listening out for word list words: tried, not kept (17 Nov 2026)
 

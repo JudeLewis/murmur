@@ -25,7 +25,10 @@ public enum WrittenNumbers {
     private static let beforeTime: Set<String> = ["at", "from", "until", "till", "by", "before", "after", "around", "about", "between"]
     /// Before a number of pounds, these make it a weight: "lost ten pounds".
     private static let weighing: Set<String> = ["lost", "lose", "losing", "gained", "gain", "gaining", "weigh", "weighs",
-                                                 "weighed", "weighing", "put", "heavier", "lighter", "about"]
+                                                 "weighed", "weighing", "put", "heavier", "lighter"]
+    /// Between a weighing word and the number: "weighs about ten pounds" is a weight, but
+    /// "spent about twelve thousand pounds" is money (seen 18 Nov 2026).
+    private static let roughly: Set<String> = ["about", "around", "roughly", "nearly", "almost", "over", "under", "just"]
 
     /// Digits already written with the unit as a word: "15 per cent" to "15%", "20 pounds" to "£20".
     nonisolated(unsafe) private static let digitUnits = try? NSRegularExpression(
@@ -45,9 +48,10 @@ public enum WrittenNumbers {
             let run = String(result[range])
             let words = run.lowercased().split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "," }).map(String.init)
             let before = word(before: range, in: result)
+            let earlier = before.isEmpty ? "" : word(before: range.lowerBound..<range.lowerBound, in: result, skipping: 1)
             let (after, afterRange) = word(after: range, in: result)
             let afterNext = afterRange.map { word(after: $0, in: result).0 } ?? ""
-            guard let written = write(words, before: before, after: after, afterNext: afterNext) else { continue }
+            guard let written = write(words, before: before, earlier: earlier, after: after, afterNext: afterNext) else { continue }
             var replacing = range
             if written.swallowsNext, let afterRange { replacing = range.lowerBound..<afterRange.upperBound }
             if written.swallowsArticle, let articleRange = article(before: range, in: result) { replacing = articleRange.lowerBound..<replacing.upperBound }
@@ -62,7 +66,7 @@ public enum WrittenNumbers {
         var swallowsArticle = false
     }
 
-    private static func write(_ words: [String], before: String, after: String, afterNext: String) -> Written? {
+    private static func write(_ words: [String], before: String, earlier: String, after: String, afterNext: String) -> Written? {
         var numbers: [(value: Int, words: [String])] = []
         var index = 0
         while index < words.count {
@@ -97,7 +101,7 @@ public enum WrittenNumbers {
         // "a hundred" and "a million" on their own stay as said ("one in a million").
         let bareScale = number.words.allSatisfy { SpokenNumbers.scales[$0] != nil }
         switch after {
-        case "pounds" where afterNext == "of" || weighing.contains(before):
+        case "pounds" where afterNext == "of" || weighing.contains(before) || (roughly.contains(before) && weighing.contains(earlier)):
             return nil  // "five pounds of flour", "lost ten pounds": a weight
         case "pound":
             return nil  // "a twelve pound turkey" or "a five pound note": can't tell
@@ -149,8 +153,16 @@ public enum WrittenNumbers {
         return String(result.reversed())
     }
 
-    private static func word(before range: Range<String.Index>, in text: String) -> String {
-        let before = text[..<range.lowerBound]
+    /// The word just before `range` (after `skipping` words), or "" if there's punctuation between.
+    private static func word(before range: Range<String.Index>, in text: String, skipping: Int = 0) -> String {
+        var before = text[..<range.lowerBound]
+        for _ in 0..<skipping {
+            guard before.last == " " else { return "" }
+            before = before.dropLast()
+            let length = before.reversed().prefix { $0.isLetter }.count
+            guard length > 0 else { return "" }
+            before = before.dropLast(length)
+        }
         guard before.last == " " else { return "" }
         return String(before.dropLast().reversed().prefix { $0.isLetter }.reversed()).lowercased()
     }

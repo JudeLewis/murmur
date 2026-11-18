@@ -320,6 +320,12 @@ struct WrittenNumbersTests {
         #expect(written("It's 20 pounds each") == "It's £20 each")
         #expect(written("It weighs 5 pounds of sugar") == "It weighs 5 pounds of sugar")
         #expect(written("version 3.5 percent") == "version 3.5 percent")
+        #expect(written("marketing spent about twelve thousand pounds more than planned")
+            == "marketing spent about £12,000 more than planned")
+        #expect(written("It was twelve thousand pounds") == "It was £12,000")
+        #expect(written("It weighs about ten pounds") == "It weighs about ten pounds")
+        #expect(written("I lost about fifteen pounds") == "I lost about fifteen pounds")
+        #expect(written("It cost about fifteen pounds") == "It cost about £15")
     }
 
     @Test func years() {
