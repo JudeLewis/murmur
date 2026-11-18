@@ -389,3 +389,51 @@ struct SpokenAddressesTests {
         #expect(written("My work email is jude at acme dot com") == "My work email is jude@acme.com")
     }
 }
+
+@Suite("4.6 Spoken commands: literal and emoji")
+struct LiteralAndEmojiTests {
+    private func written(_ said: String) -> String { Tidy.dictation(said, words: [], british: true).text }
+
+    @Test func literalKeepsACommandAsWords() {
+        #expect(written("Type the word literal comma here") == "Type the word comma here")
+        #expect(written("Say literal new line, then carry on") == "Say new line, then carry on")
+        #expect(written("Is it literal question mark or not") == "Is it question mark or not")
+        #expect(written("Finish with literal press enter") == "Finish with press enter")
+        #expect(!written("literal comma").contains(Literal.joiner))
+    }
+
+    @Test func literalOnItsOwnStaysAsSaid() {
+        #expect(written("It's a literal translation") == "It's a literal translation")
+        #expect(written("I literally can't") == "I literally can't")
+    }
+
+    @Test func emojiByName() {
+        #expect(written("That's great, thumbs up emoji.") == "That's great 👍.")
+        #expect(written("Happy birthday party emoji") == "Happy birthday 🎉")
+        #expect(written("Heart emoji") == "❤️")
+        #expect(written("Love you heart emoji heart emoji") == "Love you ❤️ ❤️")
+        #expect(written("Give it a thumbs up") == "Give it a thumbs up")
+        #expect(written("Literal fire emoji") == "Fire emoji")
+    }
+}
+
+@Suite("4.6 Spoken commands: lists")
+struct SpokenListsTests {
+    private func written(_ said: String) -> String { Tidy.dictation(said, words: [], british: true).text }
+
+    @Test func numberedPointsBecomeAList() {
+        #expect(written("My plan: one, buy milk. Two, call Sam. Three, pay the rent.")
+            == "My plan:\n1. Buy milk.\n2. Call Sam.\n3. Pay the rent.")
+        #expect(written("I need three things, one milk, two eggs, three bread.") == "I need three things:\n1. Milk\n2. Eggs\n3. Bread.")
+        #expect(written("First, book the room. Second, send the invite.") == "1. Book the room.\n2. Send the invite.")
+        #expect(written("Two jobs. Number one, the garden. Number two, the car. Then lunch.")
+            == "Two jobs.\n1. The garden.\n2. The car.\nThen lunch.")
+    }
+
+    @Test func ordinarySentencesStay() {
+        for said in ["One of them is red.", "One, two, three, go!", "First, I went home and slept.",
+                     "I have two cats and one dog.", "It's one thing after another. Second thoughts are fine."] {
+            #expect(written(said) == said)
+        }
+    }
+}

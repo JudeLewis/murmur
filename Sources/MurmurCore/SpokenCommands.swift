@@ -124,7 +124,8 @@ extension Tidy {
     /// "Press enter" taken off the end, then the marks: stray full stops, brackets,
     /// spoken punctuation, doubled marks and "scratch that"; then numbers written as digits.
     static func marks(_ finished: String, words: [WordEntry]) -> (text: String, pressEnter: Bool) {
-        let (text, pressEnter) = SpokenCommands.pressEnter(in: finished)
+        // "literal comma" first, so no rule after turns it into a symbol.
+        let (text, pressEnter) = SpokenCommands.pressEnter(in: Emoji.apply(to: Literal.protect(finished)))
         // Stray stops first, so a full stop you said yourself is never taken out.
         // Brackets before the other marks, so the marks they trim are only ever the model's guesses.
         let punctuated = DoubledMarks.remove(
@@ -136,10 +137,10 @@ extension Tidy {
     static func layout(
         _ text: String, words: [WordEntry], snippets: [Snippet], british: Bool, casual: Bool, email: Bool
     ) -> String {
-        var result = SpokenCommands.lineBreaks(in: text)
+        var result = SpokenLists.apply(to: SpokenCommands.lineBreaks(in: text))
         if email { result = EmailLayout.apply(result) }
         if casual { result = Tidy.casual(result, keeping: words) }
-        return Snippets.apply(matching(snippets, words: words, british: british), to: result)
+        return Literal.release(Snippets.apply(matching(snippets, words: words, british: british), to: result))
     }
 
     /// Snippets with their phrases spelt as the text will be by then (British spelling,
