@@ -139,11 +139,11 @@ On by default. Turns American spellings into British ones from a fixed list (col
 - Letters the model wrote one at a time are joined: "the N H S" becomes "the NHS". A last "I" is left as the word I ("the N H S I think", "Plan B I think"), and so is a first "I" before two or more letters. Letters next to a hyphen are left alone ("A T-shirt"). This happens after the word list, so an entry for the letters as heard can say what they should be ("a g p -> a GP").
 - Two marks side by side become one: "issues., and" becomes "issues, and"; "ums.." becomes "ums."; "done?." becomes "done?". An ellipsis and an abbreviation's own full stop ("etc.,") stay.
 - Numbers, by fixed rules, the same every time, with or without the AI tidy-up (added 18 Nov 2026), British style as Jude chose:
-  - Money and percentages: "twenty pounds" to "£20", "a hundred pounds" to "£100", "fifty pence" to "50p", "fifteen per cent" (or "15 per cent") to "15%". Not a weight: "five pounds of flour" stays.
-  - Years after "in", "since", "from", a month or a season: "June twenty twenty-six" to "June 2026", "in nineteen ninety-eight" to "in 1998".
-  - Times after "at", "from", "until", "by", "before", "after", "around" or "between": "at seven forty-five" to "at 7:45"; "at seven pm" to "at 7 pm".
-  - Anything over ten: "thirty two" to "32", "two thousand five hundred" to "2,500", "twenty first" to "21st".
-  - One to ten stay as words ("two options", "ten minutes"), as do "a hundred times", "one in a million", "twenty twenty vision", "half three" and "quarter past seven". Numbers that need the sentence's sense ("after six" meaning 6 o'clock) are left to the AI tidy-up (4.11).
+  - Money and percentages: "twenty pounds" to "£20", "a hundred pounds" to "£100", "fifty pence" to "50p", "fifteen per cent" (or "15 per cent") to "15%". Not a weight: "five pounds of flour" and "I've lost ten pounds" stay, and "pound" on its own ("a twelve pound turkey", "a five pound note") is left as said, as it can be either.
+  - Years from 1900 to 2099 after "in", "since", "from", a month or a season: "June twenty twenty-six" to "June 2026", "in nineteen ninety-eight" to "in 1998".
+  - Times after "at", "from", "until", "by", "before", "after", "around" or "between": "at seven forty-five" to "at 7:45", "from eleven thirty" to "from 11:30"; "seven pm" to "7 pm", and "at seven am" to "at 7 am" (not the verb: "which one am I" stays).
+  - Anything over ten: "thirty two" to "32", "two thousand five hundred" to "2,500", "twenty first" to "21st", "twenty second" to "22nd".
+  - One to ten stay as words ("two options", "ten minutes"), as do "a hundred times", "one in a million", "twenty twenty vision", "half three", "quarter past seven" and ranges like "between eleven and twelve". Numbers that need the sentence's sense ("after six" meaning 6 o'clock) are left to the AI tidy-up (4.11).
 - A space is added after each dictation so the next one doesn't run on.
 
 ### 4.4 Pasting
@@ -159,7 +159,7 @@ On by default. Turns American spellings into British ones from a fixed list (col
 - Say a short phrase and Murmur writes saved text instead: "my email" becomes your email address. Set them up in the Snippets tab of the word list window (iPhone: the Murmur app), with "When you say" and "Write".
 - If the whole dictation is the phrase, only the saved text is written, exactly as saved (no capital added, no full stop, line breaks kept).
 - Said inside a sentence, the phrase is swapped for the text (whole words, capitals and either kind of apostrophe ignored): "Send it to my email, please." All phrases are found first and then swapped, so one snippet's text is never changed by another.
-- Phrases get British spelling and the word list too before matching, so "my favorite color" still matches.
+- Phrases get British spelling, the word list, addresses and numbers too before matching, so "my favorite color" still matches and "eleven plus notes" matches "11 plus notes".
 - Snippets come last, after British spelling, the word list and casual style, so their text is never changed.
 
 ### 4.6 Spoken commands
@@ -228,7 +228,7 @@ On by default. Turns American spellings into British ones from a fixed list (col
   - "New line", "new paragraph", snippet phrases and the word list's spellings kept as they are, and no line breaks added.
   Otherwise the text is pasted as it was, with the fixed rules (4.3, 4.6) only.
 - It happens after spoken punctuation, brackets and "scratch that", and before line breaks, emails, casual style and snippets. Its answer gets British spelling and the word list again, so your words always win.
-- It takes under a second for a sentence or two (0.7 seconds on average in testing), longer for long dictations. The AI is woken when you start talking, so it's ready when you stop. It gets 4 seconds plus a second for every 40 words, up to 8 (a short one now and then took 2.5 seconds or more); if it's slower, the text is pasted as it was. Dictations of under three words (unless they hold a number said as words, like "Twenty pounds") or over 500 aren't sent to it.
+- It takes under a second for a sentence or two (0.7 seconds on average in testing), longer for long dictations. The AI is woken when you start talking, so it's ready when you stop. It gets 4 seconds plus a second for every 40 words, up to 8 (a short one now and then took 2.5 seconds or more); if it's slower, the text is pasted as it was. Dictations of under three words or over 500 aren't sent to it (the fixed rules have already written any number in a short one: "Twenty pounds." becomes "£20.").
 - It needs the whole dictation, so it isn't used with "Type as I speak" (2.9): ticking one unticks the other. If both were ticked before this setting existed, AI tidy-up wins.
 - The pill says "Writing" while it works.
 - If Apple's model isn't there (Apple Intelligence off, or still downloading after a macOS update), the text is pasted without it and the menu item reads "AI tidy-up (waiting for Apple Intelligence)". Seen twice on 17 Nov 2026, just after the macOS 27 update.
