@@ -20,15 +20,43 @@ public enum Literal {
             pattern: "(?<![\\p{L}\\p{N}])literal[,.]? (\(phrases.joined(separator: "|")))(?![\\p{L}\\p{N}])", options: [.caseInsensitive])
     }()
 
+    /// A word with the hidden mark after its first letter: "c\u{2060}omma".
+    private static func hide(_ phrase: Substring) -> String {
+        phrase.split(separator: " ", omittingEmptySubsequences: false).map { word in
+            word.isEmpty ? "" : String(word.prefix(1)) + String(joiner) + word.dropFirst()
+        }.joined(separator: " ")
+    }
+
+    /// The protected phrases in `text`, as plain words: ["comma", "new line"].
+    public static func phrases(in text: String) -> [String] {
+        guard text.contains(joiner) else { return [] }
+        let pattern = "\\S*\u{2060}\\S*(?: \\S*\u{2060}\\S*)*"
+        guard let found = try? NSRegularExpression(pattern: pattern) else { return [] }
+        return found.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
+            Range(match.range, in: text).map { release(String(text[$0])).trimmingCharacters(in: .punctuationCharacters) }
+        }
+    }
+
+    /// `phrases` protected again in the AI's answer, or nil if one of them is missing from it.
+    public static func protectAgain(_ phrases: [String], in answer: String) -> String? {
+        var result = answer
+        var from = result.startIndex
+        for phrase in phrases {
+            guard let found = result.range(of: phrase, options: [.caseInsensitive], range: from..<result.endIndex) else { return nil }
+            let hidden = hide(result[found])
+            result.replaceSubrange(found, with: hidden)
+            from = result.index(found.lowerBound, offsetBy: hidden.count)
+        }
+        return result
+    }
+
     /// "literal comma" to "comma", with a hidden mark inside so the rules after leave it alone.
     public static func protect(_ text: String) -> String {
         guard let regex else { return text }
         var result = text
         for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).reversed() {
             guard let whole = Range(match.range, in: result), let phrase = Range(match.range(at: 1), in: result) else { continue }
-            let hidden = result[phrase].split(separator: " ", omittingEmptySubsequences: false).map { word in
-                word.isEmpty ? "" : String(word.prefix(1)) + String(joiner) + word.dropFirst()
-            }.joined(separator: " ")
+            let hidden = hide(result[phrase])
             // "Literal fire emoji" at the start keeps its capital: "Fire emoji".
             let capital = result[whole].first?.isUppercase == true
             result.replaceSubrange(whole, with: capital ? hidden.prefix(1).uppercased() + hidden.dropFirst() : hidden)
@@ -84,7 +112,9 @@ public enum Emoji {
 /// Lists said out loud (SPEC.md 4.6): "My plan: one, buy milk. Two, call Sam." becomes a numbered
 /// list, one point a line. The points must start at one and go up in order, at the start of the
 /// text or after punctuation, with words in each, so "One of them is red" or "one, two, three, go"
-/// stay as said. Idea from Wispr Flow and VoiceInk (researched 18 Nov 2026).
+/// stay as said. A list of just two said as "one ... two ..." needs a comma or full stop after
+/// each number (or "first", "number one"), so "One thing though, two people can't come" stays.
+/// Idea from Wispr Flow and VoiceInk (researched 18 Nov 2026).
 public enum SpokenLists {
     private static let markers: [String: Int] = [
         "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
@@ -94,22 +124,26 @@ public enum SpokenLists {
     nonisolated(unsafe) private static let regex: NSRegularExpression? = {
         let words = markers.keys.sorted { $0.count > $1.count }.joined(separator: "|")
         return try? NSRegularExpression(
-            pattern: "(?:^|(?<=[.!?:;,] )|(?<=\\n))(?:number )?(\(words)|[1-9]|10)(?![\\p{L}\\p{N}])[,.:)]? *", options: [.caseInsensitive])
+            pattern: "(?:^|(?<=[.!?:;,] )|(?<=\\n))(number )?(\(words)|[1-9]|10)(?![\\p{L}\\p{N}])([,.:)])? *", options: [.caseInsensitive])
     }()
 
     public static func apply(to text: String) -> String {
         guard let regex else { return text }
+        var clear: [Range<String.Index>: Bool] = [:]
         let found = regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match -> (Range<String.Index>, Int)? in
-            guard let range = Range(match.range, in: text), let word = Range(match.range(at: 1), in: text) else { return nil }
+            guard let range = Range(match.range, in: text), let word = Range(match.range(at: 2), in: text) else { return nil }
             let key = text[word].lowercased()
             guard let number = markers[key] ?? Int(key) else { return nil }
+            // Clearly a point: "number one", "first", or a mark straight after ("one,").
+            clear[range] = match.range(at: 1).location != NSNotFound || match.range(at: 3).location != NSNotFound
+                || !["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"].contains(key)
             return (range, number)
         }
         // The first run of markers 1, 2, 3 ... in order.
         guard let start = found.firstIndex(where: { $0.1 == 1 }) else { return text }
         var run = [found[start]]
         for marker in found[(start + 1)...] where marker.1 == run.count + 1 { run.append(marker) }
-        guard run.count >= 2 else { return text }
+        guard run.count >= 3 || (run.count == 2 && run.allSatisfy { clear[$0.0] == true }) else { return text }
 
         var points: [String] = []
         for (index, marker) in run.enumerated() {
@@ -138,5 +172,49 @@ public enum SpokenLists {
         var result = intro.isEmpty ? list : intro + "\n" + list
         if !after.isEmpty { result += "\n" + after }
         return result
+    }
+}
+
+/// "Um", "uh", "erm" and "er" taken out (SPEC.md 3.1), for Parakeet Ultra, which keeps them.
+/// Bark 3.0 Clean drops them itself. "Ah", "hmm" and "err" stay: they're often meant.
+public enum Fillers {
+    static let words: Set<String> = ["um", "umm", "uh", "uhh", "uhm", "erm", "er"]
+
+    /// Whether a word the speech model heard is only a filler ("um", "Uh,").
+    public static func isFiller(_ word: String) -> Bool {
+        let letters = word.filter(\.isLetter)
+        // "ER" and "UM" in capitals are more likely the letters (A and E).
+        guard letters.count < 2 || letters != letters.uppercased() else { return false }
+        return word.allSatisfy { $0.isLetter || ",.?!".contains($0) } && words.contains(letters.lowercased())
+    }
+
+    /// "So, um, I realised" to "So, I realised"; "Um, so I think" to "So I think". A comma
+    /// before the filler stays, as it may be meant ("Hi Sam, um, how are you?").
+    public static func remove(from text: String) -> String {
+        var out: [String] = []
+        var capitaliseNext = false
+        for token in text.split(separator: " ").map(String.init) {
+            guard isFiller(token) else {
+                var word = token
+                // Not "iPhone", which has its own capital.
+                if capitaliseNext, let first = word.first, first.isLowercase, !word.contains(where: \.isUppercase) {
+                    word = first.uppercased() + word.dropFirst()
+                }
+                capitaliseNext = false
+                out.append(word)
+                continue
+            }
+            let startsSentence = out.last.map { $0.last.map { ".!?\n".contains($0) } ?? true } ?? true
+            if startsSentence { capitaliseNext = true }
+            guard var last = out.popLast() else { continue }
+            if let end = token.last, ".?!".contains(end) {
+                // "It was um." to "It was."
+                if last.hasSuffix(",") { last.removeLast() }
+                if let mark = last.last, !".?!".contains(mark) { last.append(end) }
+                capitaliseNext = true
+            }
+            out.append(last)
+        }
+        return out.joined(separator: " ")
     }
 }

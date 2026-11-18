@@ -264,10 +264,17 @@ public enum BeforeCursor {
     }
 
     /// Whether the cursor is in the middle of a sentence: after a word, a number, a comma, a
-    /// semicolon, a dash or an opening bracket, not after a full stop, a line break or nothing.
+    /// semicolon, a dash between words or an opening bracket, not after a full stop, a line
+    /// break, nothing, or a bullet ("- " at the start of a line).
     public static func isMidSentence(_ before: String?) -> Bool {
-        guard let last = before?.reversed().first(where: { $0 != " " && $0 != "\t" }) else { return false }
-        return last.isLetter || last.isNumber || ",;-–(".contains(last)
+        guard let before else { return false }
+        let trimmed = before.trimmingCharacters(in: CharacterSet(charactersIn: " \t"))
+        guard let last = trimmed.last else { return false }
+        if "-\u{2013}\u{2014}".contains(last) {
+            let rest = trimmed.dropLast()
+            return rest.last == " " && rest.trimmingCharacters(in: .whitespaces).last.map { !$0.isNewline } == true
+        }
+        return last.isLetter || last.isNumber || ",;(".contains(last)
     }
 
     /// Days and months, which Apple's name spotter counts as ordinary words.

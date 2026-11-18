@@ -272,13 +272,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let words = Settings.words()
         let snippets = Settings.snippets
         let british = Settings.british
+        let model = Settings.model
+        // The text before the cursor as it was at the first words typed, and never changed after:
+        // if it came later, the start would be retyped, and it could include Murmur's own typing.
+        var before: String??
         // Whether it's an email may only be known a moment after listening starts.
-        liveTyper = LiveTyper(recorder: recorder, transcriber: transcriber, model: Settings.model, whisper: Settings.whisperMode, app: dictatingInto) {
+        liveTyper = LiveTyper(recorder: recorder, transcriber: transcriber, model: model, whisper: Settings.whisperMode, app: dictatingInto) {
             [weak self] heard in
             let kept = quiet ? QuietVoices.keep(heard) : heard
-            let before = self?.textBeforeCursor
+            if before == nil { before = .some(self?.textBeforeCursor) }
+            let before = before ?? nil
             let dictation = Tidy.dictation(
-                kept.map(\.text).joined(separator: " "), words: words, snippets: snippets, british: british,
+                model.withoutFillers(kept.map(\.text).joined(separator: " ")), words: words, snippets: snippets, british: british,
                 email: self?.dictatingEmail ?? false, style: style, before: before)
             // A space in front in the middle of a sentence, typed with the words (SPEC.md 4.12).
             return Dictation(text: Tidy.spaceInFront(of: dictation.text, after: before) + dictation.text, pressEnter: dictation.pressEnter)
@@ -352,10 +357,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     // Other people's voices left out (SPEC.md 4.10).
                     let heard = try await transcriber.heard(audio, sampleRate: sampleRate, model: model)
                     let kept = QuietVoices.keep(heard.words)
-                    raw = kept.count == heard.words.count ? heard.text : kept.map(\.text).joined(separator: " ")
+                    raw = model.withoutFillers(kept.count == heard.words.count ? heard.text : kept.map(\.text).joined(separator: " "))
                     if kept.count < heard.words.count { log.notice("Left out \(heard.words.count - kept.count) quieter words") }
                 } else {
-                    raw = try await transcriber.transcribe(audio, sampleRate: sampleRate, model: model)
+                    raw = model.withoutFillers(try await transcriber.transcribe(audio, sampleRate: sampleRate, model: model))
                 }
                 unsent = nil
                 if Settings.model == model { loading = .ready }
@@ -681,6 +686,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return menuItem
     }
 
+    /// Which speech model (SPEC.md 3.1).
+    private func speechModelMenu() -> NSMenuItem {
+        let submenu = NSMenu()
+        let choices: [(SpeechModel, String)] = [
+            (.tidy, "Tidy (drops um and er)"),
+            (.ultra, "Ultra (fewer mistakes, 600 MB download)"),
+            (.exact, "Word for word"),
+        ]
+        for (model, title) in choices {
+            let entry = item(title, #selector(chooseSpeechModel(_:)), on: Settings.model == model)
+            entry.representedObject = model.rawValue
+            submenu.addItem(entry)
+        }
+        let menuItem = NSMenuItem(title: "Speech model", action: nil, keyEquivalent: "")
+        menuItem.submenu = submenu
+        return menuItem
+    }
+
     private func settingsMenu() -> NSMenuItem {
         let submenu = NSMenu()
         // Apple's model can be missing for a while, such as after a macOS update (SPEC.md 4.11).
@@ -690,7 +713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         submenu.addItem(item("Type as I speak (turns AI tidy-up off)", #selector(toggleTypeAsISpeak), on: Settings.typeAsISpeak))
         submenu.addItem(item("Lay out emails", #selector(toggleLayOutEmails), on: Settings.layOutEmails))
         submenu.addItem(item("Ignore quieter voices (people nearby)", #selector(toggleIgnoreQuieterVoices), on: Settings.ignoreQuieterVoices))
-        submenu.addItem(item("Tidy speech (drops um and er)", #selector(toggleTidy), on: Settings.model == .tidy))
+        submenu.addItem(speechModelMenu())
         submenu.addItem(item("British spelling", #selector(toggleBritish), on: Settings.british))
         submenu.addItem(item("Fix \u{201C}no wait, I mean\u{201D} (Apple Intelligence)", #selector(toggleFixCorrections), on: Settings.fixCorrections))
         submenu.addItem(item("Whisper mode (for speaking quietly)", #selector(toggleWhisperMode), on: Settings.whisperMode))
@@ -792,9 +815,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func pasteAgainFromMenu() { pasteAgain() }
 
-    @objc private func toggleTidy() {
-        Settings.model = Settings.model == .tidy ? .exact : .tidy
+    @objc private func chooseSpeechModel(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let model = SpeechModel(rawValue: raw), model != Settings.model else { return }
+        // A new download mustn't leave the Mac short of space: below 10 GB macOS removes
+        // Apple Intelligence's model (seen 17 Nov 2026).
+        if !model.isDownloaded, let free = Self.freeSpace(), free < 11_000_000_000 {
+            pill.flash("Not enough free space to download it. Free up a few GB first.", seconds: 5)
+            return
+        }
+        Settings.model = model
         loadModel()
+    }
+
+    private static func freeSpace() -> Int64? {
+        let home = URL(fileURLWithPath: NSHomeDirectory())
+        return try? home.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
     }
 
     @objc private func toggleBritish() { Settings.british.toggle() }

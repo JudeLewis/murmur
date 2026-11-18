@@ -102,7 +102,9 @@ extension Tidy {
         var finished = finish(raw, words: words, british: british)
         if let fixed = await fix(finished) { finished = fixed }
         var (text, pressEnter) = marks(finished, words: words)
-        if !text.isEmpty, let tidied = await tidy(text) {
+        // The AI gets plain words: "literal comma" has a hidden mark inside "comma" that it might
+        // drop or split. The mark goes back on its answer, which isn't used if a phrase is missing.
+        if !text.isEmpty, let answer = await tidy(Literal.release(text)), let tidied = Literal.protectAgain(Literal.phrases(in: text), in: answer) {
             // The word list again, but only entries that can't change their own text ("murmur ->
             // Murmur app" would give "Murmur app app"), as the text has already been through it.
             text = WrittenNumbers.apply(to: DoubledMarks.remove(from: finish(tidied, words: WordList.safeToRepeat(words), british: british)))

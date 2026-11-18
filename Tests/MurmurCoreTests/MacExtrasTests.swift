@@ -240,3 +240,96 @@ private actor Box {
     var text: String?
     func set(_ text: String) { self.text = text }
 }
+
+@Suite("3.1 The models: fillers taken out for Ultra")
+struct FillerTests {
+    @Test func fillersAndTheirCommasGo() {
+        #expect(Fillers.remove(from: "So, um, I realised it was late.") == "So, I realised it was late.")
+        #expect(Fillers.remove(from: "Hi Sam, um, how are you?") == "Hi Sam, how are you?")
+        #expect(Fillers.remove(from: "Um, so I think we should go.") == "So I think we should go.")
+        #expect(Fillers.remove(from: "Can you send the uh report by Friday?") == "Can you send the report by Friday?")
+        #expect(Fillers.remove(from: "It was erm. Then we left.") == "It was. Then we left.")
+        #expect(Fillers.remove(from: "Um, iPhone sales are up.") == "iPhone sales are up.")
+    }
+
+    @Test func wordsThatAreOftenMeantStay() {
+        #expect(Fillers.remove(from: "Ah, I see. Hmm, let me think.") == "Ah, I see. Hmm, let me think.")
+        #expect(Fillers.remove(from: "To err is human.") == "To err is human.")
+        #expect(Fillers.remove(from: "The umbrella is under the bed.") == "The umbrella is under the bed.")
+        #expect(Fillers.remove(from: "Take him to the ER.") == "Take him to the ER.")
+    }
+
+    @Test func aFillerAfterAFullStopLetsTheNextWordStartTheSentence() {
+        #expect(Fillers.remove(from: "That's fine. Um, and then we left.") == "That's fine. And then we left.")
+    }
+
+    @Test func eachHeardWordCanBeChecked() {
+        #expect(Fillers.isFiller("um,"))
+        #expect(Fillers.isFiller("Uh"))
+        #expect(!Fillers.isFiller("umbrella"))
+        #expect(!Fillers.isFiller("hmm"))
+    }
+}
+
+@Suite("4.6 Spoken commands: literal and the AI tidy-up")
+struct LiteralWithAITests {
+    @Test func theAIGetsPlainWordsAndTheProtectionGoesBackOn() async {
+        let seen = Seen()
+        let dictation = await Tidy.dictation(
+            "put a literal comma here new line thanks", words: [], british: true,
+            fix: { _ in nil },
+            tidy: { text in
+                await seen.set(text)
+                return "Put a comma here new line thanks."
+            })
+        #expect(await seen.text?.contains("\u{2060}") == false)
+        #expect(dictation.text == "Put a comma here new line thanks.")
+    }
+
+    @Test func anAnswerThatLostTheProtectedWordIsNotUsed() async {
+        let dictation = await Tidy.dictation(
+            "say literal new line please", words: [], british: true, fix: { _ in nil },
+            tidy: { _ in "Say please." })
+        #expect(dictation.text.contains("new line"))
+        #expect(!dictation.text.contains("\n"))
+    }
+
+    @Test func phrasesAreFoundAndProtectedAgain() {
+        let protected = Literal.protect("write literal new line and literal comma")
+        #expect(Literal.phrases(in: protected) == ["new line", "comma"])
+        let again = Literal.protectAgain(["new line", "comma"], in: "Write new line and comma.")
+        #expect(again.map(Literal.release) == "Write new line and comma.")
+        #expect(again?.contains("\u{2060}") == true)
+        #expect(Literal.protectAgain(["comma"], in: "Write it.") == nil)
+    }
+}
+
+actor Seen {
+    var text: String?
+    func set(_ value: String) { text = value }
+}
+
+@Suite("4.12 Text before the cursor: bullets and dashes")
+struct BeforeCursorDashTests {
+    @Test func aBulletIsNotMidSentence() {
+        #expect(!BeforeCursor.isMidSentence("- "))
+        #expect(!BeforeCursor.isMidSentence("Shopping\n- "))
+        #expect(BeforeCursor.isMidSentence("It was late - "))
+        #expect(BeforeCursor.continuing("Buy milk", after: "Shopping\n- ") == "Buy milk")
+    }
+}
+
+@Suite("4.6 Spoken commands: lists that aren't lists")
+struct ListFalseAlarmTests {
+    @Test func twoPlainNumbersStartingClausesStay() {
+        let said = "Sounds good. One thing though, two people can't come."
+        #expect(Tidy.dictation(said, words: [], british: true).text == said)
+    }
+
+    @Test func veryCasualKeepsAListAndAbbreviations() {
+        let text = Tidy.veryCasual("1. Buy milk\n2. Call Sam")
+        #expect(text == "1. buy milk\n2. call sam")
+        #expect(Tidy.veryCasual("Sounds good. See you at 6").hasPrefix("sounds good, see you"))
+        #expect(Tidy.veryCasual("Bring snacks, e.g. crisps") == "bring snacks, e.g. crisps")
+    }
+}

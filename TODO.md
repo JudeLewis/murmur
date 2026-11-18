@@ -4,12 +4,8 @@ Live work only. Finished items move to archive/.
 
 ## Now
 
-- [ ] **In progress (18 Nov 2026): Jude's "do all the Mac ideas" list.** Done and committed, not yet installed or pushed: lists, emoji, "literal" (4f20702); styles for each app (aee757d). Next steps, in order:
-  1. Text before the cursor (SPEC.md 4.12, not written yet). Built and compiling but uncommitted: `Selection.textBeforeCursor()` (Mac), `BeforeCursor` in Context.swift (context, isMidSentence, continuing), `before:` on Tidy.dictation and layout, `AITidy.prompt(_:before:)`, `OnDeviceAI.tidy(..., before:)`. Still to do: read it in AppDelegate when listening starts (off the main thread, like spotEmail), pass it to Tidy.dictation, the tidy closure and the live typer; paste with `Tidy.forInsertion(text, after: before, pressEnter:)` so a space goes in front mid-sentence; tests (BeforeCursor rules, prompt with before, accept refuses a reply containing <before_cursor>); SPEC 4.12; then try it on Apple's model with `--tidy-file`.
-  2. The stricter answer format for Apple's AI (`@Generable` struct with one text field, as Handy does), tried on the 31 test dictations; keep only if not worse.
-  3. The stray comma where a filler went ("my favourite colour is, grey"): check whether the AI tidy-up already fixes it; a rule only if not.
-  4. Parakeet Ultra as a menu choice (`AsrModelVersion.ultra`, 595 MB; check free space first, keep over 10 GB). It keeps "um", so add filler removal by fixed rules for it. Compare with Bark 3.0 Clean using `say` clips and `./scripts/check-speech.sh`, then ask Jude which should be the default.
-  5. /code-review, `./scripts/install.sh`, commit and push, update docs/architecture.md, the guide doc and memory, and tell Jude.
+- [ ] **In progress (18 Nov 2026): Jude's "do all the Mac ideas" list.** Done: lists, emoji, "literal", styles for each app, text before the cursor, Parakeet Ultra in the menu with fillers taken out. Tried and not kept: `@Generable` answers (architecture.md). Not needed: a stray-comma rule (the AI fixes 3 in 4). Still to do:
+  1. Compare Ultra with Bark 3.0 Clean (`say` clips through `.build/debug/Murmur --transcribe clip.aiff --ultra`, and `./scripts/check-speech.sh`), then ask Jude which should be the default. Waiting on free space: the Mac had 8.5 GB free on 18 Nov 2026 (needs over 11 GB to download Ultra's 600 MB); Jude to pick what to delete.
 
 - [ ] Jude tries the AI tidy-up (17 Nov 2026) for a few days: note anything it gets wrong, and words to add to the word list. If Apple's model isn't good enough, the fallback is Qwen 3.5 4B on the Mac (docs/architecture.md, AI tidy-up).
 - [ ] Watch Apple's model: it was "not ready" twice on 17 Nov 2026, first while it downloaded after the macOS 27 update, then because Claude's test downloads filled the disk (fixed). The menu now says when it's missing. If it keeps dropping out, build the Qwen 3.5 4B backup.
@@ -20,9 +16,4 @@ Live work only. Finished items move to archive/.
 - [ ] iPhone: keep a recording that failed to turn into text, and offer "Try again" in the app, as the Mac does (found in review, 2 Nov 2026).
 - [ ] One microphone class for Mac and iPhone (Recorder and SessionMic are near copies; found in review, 2 Nov 2026). Left for now so the Mac app stays unchanged while the iPhone is new.
 
-- [ ] If words are still misheard after a few days of the 8 Nov fixes: try Parakeet Ultra (FluidAudio's published tests show fewer mistakes than Bark 3.0 Clean, 3.81% against 4.66%, but it keeps "um" and is a new 595 MB download).
-- [ ] From other dictation apps (researched 18 Nov 2026): lists from "one ... two ..." or "first ... second ..." (Wispr Flow, VoiceInk); emoji names like "thumbs up emoji" by a fixed list (FluidVoice); saying "literal" before a word to keep it as a word (FluidVoice); Apple's structured answers (`@Generable`) so the model can't add an introduction (Handy).
-- [ ] AI tidy-up knows the text around the cursor and the app, as Wispr Flow does, to spell names and match the tone.
-- [ ] Remove a stray comma left where a filler was dropped ("my favourite colour is, grey"). The AI tidy-up may already fix this; check in use.
 - [ ] iPhone: Type as I speak on the keyboard too, once the Mac version has been used for a while.
-- [ ] Per-app styles like Wispr's (emails formal, chats casual, notes as said), building on the email layout.

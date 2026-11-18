@@ -94,9 +94,11 @@ A recording stops by itself after 15 minutes and is written out as usual.
 ### 3.1 The models
 
 - Runs on the Mac with NVIDIA's Parakeet model, in the Bark 3.0 versions made by Conway Research. English only.
-- "Tidy speech (drops um and er)", on by default: Bark 3.0 Clean, which leaves out fillers, false starts and repeated words.
-- With Tidy speech off: Bark 3.0, word for word as said.
-- Each model downloads once (about 400 MB) to ~/Library/Application Support/FluidAudio/Models.
+- Settings, Speech model, one of three:
+  - "Tidy (drops um and er)", the one to start with: Bark 3.0 Clean, which leaves out fillers, false starts and repeated words.
+  - "Ultra (fewer mistakes, 600 MB download)": Parakeet Ultra, made by Moondream. In FluidAudio's published tests it gets fewer words wrong (3.81% against 4.66%), but it keeps "um", so Murmur takes out "um", "uh", "erm" and "er" itself, with the commas around them ("So, um, I think" to "So I think"). "Ah" and "hmm" stay, as they're often meant. False starts and repeated words aren't dropped by the model; the AI tidy-up (4.11) takes out a word said twice.
+  - "Word for word": Bark 3.0, everything as said.
+- Each model downloads once (about 400 to 600 MB) to ~/Library/Application Support/FluidAudio/Models. A model that isn't downloaded yet can't be chosen with under 11 GB free; the pill says to free up space first (below 10 GB, macOS removes Apple Intelligence's model).
 
 ### 3.2 Getting ready
 
@@ -277,7 +279,7 @@ The last 20 dictations are kept, newest first; the menu shows 10. Clicking one c
 4. Recent (click one to copy it), Paste last dictation again (⌃⌘V), Word list and snippets…
 5. Style in (the app in front): Normal, Casual, Very casual or As said (4.7)
 6. Microphone (3.3)
-7. Settings: AI tidy-up (Apple Intelligence), Type as I speak (turns AI tidy-up off), Lay out emails, Ignore quieter voices (people nearby), Tidy speech (drops um and er), British spelling, Fix “no wait, I mean” (Apple Intelligence), Whisper mode (for speaking quietly), Hold Fn to talk, Command Mode: hold Fn and Control, Turn music down while listening, Sounds, Open at login: each with a tick
+7. Settings: AI tidy-up (Apple Intelligence), Type as I speak (turns AI tidy-up off), Lay out emails, Ignore quieter voices (people nearby), Speech model (Tidy, Ultra or Word for word, 3.1), British spelling, Fix “no wait, I mean” (Apple Intelligence), Whisper mode (for speaking quietly), Hold Fn to talk, Command Mode: hold Fn and Control, Turn music down while listening, Sounds, Open at login: each with a tick (the speech model as a list with one ticked)
 8. Quit Murmur
 
 ## 7. Setting up

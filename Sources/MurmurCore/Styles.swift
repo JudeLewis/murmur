@@ -83,6 +83,9 @@ extension Tidy {
             if character.isLetter || character == "'" || character == "\u{2019}" { word.append(character) } else { flush(); result.append(character) }
         }
         flush()
-        return result.replacingOccurrences(of: "\\.(?= +\\p{Ll})", with: ",", options: .regularExpression)
+        // Not after a list number ("1. buy milk") or a single letter ("e.g. this").
+        return result.replacingOccurrences(
+            of: "(?m)(?<=\\p{L}\\p{L}|[\\p{N})\\]\"'\u{2019}\u{201D}])(?<!^\\p{N}|^\\p{N}\\p{N})\\.(?= +\\p{Ll})", with: ",",
+            options: .regularExpression)
     }
 }
