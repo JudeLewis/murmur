@@ -31,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var accessibilityTimer: Timer?
     /// The last recording, kept if it couldn't be turned into text, so it can be tried again.
     private var unsent: (samples: [Float], sampleRate: Double)?
-    /// The app in front when listening started: it decides casual style.
+    /// The app in front when listening started: it decides the writing style.
     private var dictatingInto: String?
     /// The volume before Murmur turned it down, what the device then reported,
     /// and which device it was (the output can change mid-dictation).
@@ -250,7 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// model is ready and Murmur may press keys; otherwise it's pasted at the end.
     private func startTypingLive() {
         guard Settings.typeAsISpeak, !commandMode, loading == .ready, AXIsProcessTrusted(), let recorder else { return }
-        let casual = dictatingInto.map(Settings.casualApps.contains) ?? false
+        let style = Settings.appStyles.style(for: dictatingInto)
         let quiet = Settings.ignoreQuieterVoices
         let words = Settings.words()
         let snippets = Settings.snippets
@@ -260,8 +260,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             [weak self] heard in
             let kept = quiet ? QuietVoices.keep(heard) : heard
             return Tidy.dictation(
-                kept.map(\.text).joined(separator: " "), words: words, snippets: snippets, british: british, casual: casual,
-                email: self?.dictatingEmail ?? false)
+                kept.map(\.text).joined(separator: " "), words: words, snippets: snippets, british: british,
+                email: self?.dictatingEmail ?? false, style: style)
         }
         liveTyper?.start()
     }
@@ -412,16 +412,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func deliver(_ raw: String) async {
-        let casual = dictatingInto.map(Settings.casualApps.contains) ?? false
+        let style = Settings.appStyles.style(for: dictatingInto)
         let words = Settings.words()
         let snippets = Settings.snippets
-        let fixOn = Settings.fixCorrections
-        let tidyOn = Settings.aiTidy
+        // "As said" apps get no AI at all (SPEC.md 4.7).
+        let fixOn = Settings.fixCorrections && style.usesAI
+        let tidyOn = Settings.aiTidy && style.usesAI
         let british = Settings.british
         let triggers = snippets.map(\.trigger)
         let protected = AITidy.protected(snippets: snippets, words: words, british: british)
         let dictation = await Tidy.dictation(
-            raw, words: words, snippets: snippets, british: british, casual: casual, email: dictatingEmail,
+            raw, words: words, snippets: snippets, british: british, email: dictatingEmail, style: style,
             // "Monday, no wait, I mean Tuesday": the on-device AI may only take words out (SPEC.md 4.8).
             fix: { finished in
                 guard fixOn, let fixed = try? await OnDeviceAI.fixSelfCorrection(in: finished, keeping: triggers) else { return nil }
@@ -620,10 +621,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if let front = NSWorkspace.shared.frontmostApplication, let id = front.bundleIdentifier,
            id != Bundle.main.bundleIdentifier {
-            let casual = item("Casual style in \(front.localizedName ?? "this app")", #selector(toggleCasual(_:)),
-                              on: Settings.casualApps.contains(id))
-            casual.representedObject = id
-            menu.addItem(casual)
+            // Style in Messages ▸ Normal, Casual, Very casual, As said (SPEC.md 4.7).
+            let chosen = Settings.appStyles.style(for: id)
+            let styles = NSMenu()
+            for style in WritingStyle.allCases {
+                let entry = item(style.title, #selector(chooseStyle(_:)), on: style == chosen)
+                entry.representedObject = [id, style.rawValue]
+                styles.addItem(entry)
+            }
+            let styleItem = NSMenuItem(title: "Style in \(front.localizedName ?? "this app"): \(chosen.shortName)", action: nil, keyEquivalent: "")
+            styleItem.submenu = styles
+            menu.addItem(styleItem)
         }
         menu.addItem(microphoneMenu())
         menu.addItem(settingsMenu())
@@ -729,11 +737,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         wordsWindow?.makeKeyAndOrderFront(nil)
     }
 
-    @objc private func toggleCasual(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
-        var apps = Settings.casualApps
-        if apps.contains(id) { apps.remove(id) } else { apps.insert(id) }
-        Settings.casualApps = apps
+    @objc private func chooseStyle(_ sender: NSMenuItem) {
+        guard let pair = sender.representedObject as? [String], pair.count == 2,
+              let style = WritingStyle(rawValue: pair[1]) else { return }
+        var styles = Settings.appStyles
+        styles.set(style, for: pair[0])
+        Settings.appStyles = styles
     }
 
     @objc private func toggleHoldToTalk() {

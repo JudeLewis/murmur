@@ -179,10 +179,17 @@ On by default. Turns American spellings into British ones from a fixed list (col
 
 ### 4.7 Casual style
 
-- For chats: no capital at the start and no full stop at the end ("sounds good to me"). Question and exclamation marks stay.
-- "I", words with capitals inside (iPhone, NASA) and names in the word list keep their capitals.
-- Mac: per app. The menu shows "Casual style in Messages" (or whichever app is in front) with a tick. Messages and WhatsApp start ticked. The app in front when listening starts decides.
-- iPhone: the "aa" switch on the keyboard, which stays as you left it.
+Styles for each app on the Mac (added 18 Nov 2026, like Wispr Flow's; before that, casual style was a tick per app):
+
+- The menu shows "Style in Messages: Casual" (or whichever app is in front), with a choice of four:
+  - **Normal**: capitals and full stops, tidied by the AI.
+  - **Casual (no capital or full stop at the ends)**: for chats ("sounds good to me"). Question and exclamation marks stay.
+  - **Very casual (small letters, no full stops)**: casual, and every word in small letters, with full stops inside made commas: "Sounds good. See you at 6." becomes "sounds good, see you at 6".
+  - **As said (no AI tidy-up)**: no AI tidy-up and no "no wait" fix, so your words stay as the speech model heard them (for notes). The fixed rules (spoken punctuation, numbers, lists and so on) still apply.
+- In Casual and Very casual, "I", words with capitals inside (iPhone, NASA, NHS) and names in the word list keep their capitals.
+- Messages and WhatsApp start as Casual; every other app starts as Normal. A casual app ticked before 18 Nov 2026 stays Casual.
+- The app in front when listening starts decides.
+- iPhone: the "aa" switch on the keyboard turns Casual on or off, and stays as you left it.
 
 ### 4.8 Self-corrections
 
@@ -260,7 +267,7 @@ The last 20 dictations are kept, newest first; the menu shows 10. Clicking one c
 2. Start or Stop dictation
 3. Warnings, only when something needs setting up (see 7)
 4. Recent (click one to copy it), Paste last dictation again (⌃⌘V), Word list and snippets…
-5. Casual style in (the app in front), with a tick
+5. Style in (the app in front): Normal, Casual, Very casual or As said (4.7)
 6. Microphone (3.3)
 7. Settings: AI tidy-up (Apple Intelligence), Type as I speak (turns AI tidy-up off), Lay out emails, Ignore quieter voices (people nearby), Tidy speech (drops um and er), British spelling, Fix “no wait, I mean” (Apple Intelligence), Whisper mode (for speaking quietly), Hold Fn to talk, Command Mode: hold Fn and Control, Turn music down while listening, Sounds, Open at login: each with a tick
 8. Quit Murmur

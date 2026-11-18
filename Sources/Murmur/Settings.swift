@@ -22,8 +22,6 @@ enum Settings {
             "layOutEmails": true,
             "ignoreQuieterVoices": true,
             "whisperMode": false,
-            // Messages and WhatsApp start in casual style (SPEC.md 4.7).
-            "casualApps": ["com.apple.MobileSMS", "net.whatsapp.WhatsApp"],
         ])
     }
 
@@ -115,10 +113,13 @@ enum Settings {
         set { defaults.set(newValue, forKey: "duckedVolume") }
     }
 
-    /// Apps (by bundle id) where dictations use casual style.
-    static var casualApps: Set<String> {
-        get { Set(defaults.stringArray(forKey: "casualApps") ?? []) }
-        set { defaults.set(newValue.sorted(), forKey: "casualApps") }
+    /// The writing style for each app, by bundle id (SPEC.md 4.7). Messages and WhatsApp start casual.
+    static var appStyles: AppStyles {
+        get {
+            AppStyles(saved: defaults.dictionary(forKey: "appStyles") as? [String: String],
+                      casualApps: defaults.stringArray(forKey: "casualApps"))
+        }
+        set { defaults.set(newValue.saved, forKey: "appStyles") }
     }
 
     /// Set once, so the first launch can turn on Open at Login without overriding a later "off".

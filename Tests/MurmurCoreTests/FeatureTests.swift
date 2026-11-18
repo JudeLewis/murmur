@@ -315,3 +315,39 @@ struct KeyboardExtrasTests {
         #expect(request == KeyboardRequest(id: 5, kind: .start))
     }
 }
+
+@Suite("4.7 Casual style: styles for each app")
+struct WritingStyleTests {
+    @Test func messagesAndWhatsAppStartCasual() {
+        let styles = AppStyles(saved: nil)
+        #expect(styles.style(for: "com.apple.MobileSMS") == .casual)
+        #expect(styles.style(for: "net.whatsapp.WhatsApp") == .casual)
+        #expect(styles.style(for: "com.apple.Notes") == .normal)
+        #expect(styles.style(for: nil) == .normal)
+    }
+
+    @Test func savedStylesAndTheOldCasualListAreRead() {
+        #expect(AppStyles(saved: ["com.apple.Notes": "asSaid"]).style(for: "com.apple.Notes") == .asSaid)
+        #expect(AppStyles(saved: ["com.apple.Notes": "asSaid"]).style(for: "com.apple.MobileSMS") == .normal)
+        #expect(AppStyles(saved: nil, casualApps: ["com.tinyspeck.slackmacgap"]).style(for: "com.tinyspeck.slackmacgap") == .casual)
+        var styles = AppStyles(saved: nil)
+        styles.set(.normal, for: "com.apple.MobileSMS")
+        #expect(styles.saved["com.apple.MobileSMS"] == nil)
+        styles.set(.veryCasual, for: "com.apple.MobileSMS")
+        #expect(styles.saved["com.apple.MobileSMS"] == "veryCasual")
+    }
+
+    @Test func veryCasualIsSmallLettersWithoutFullStops() {
+        let names = [WordEntry(heard: "sam", written: "Sam")]
+        #expect(Tidy.veryCasual("Sounds good. See you at 6 with Sam.", keeping: names) == "sounds good, see you at 6 with Sam")
+        #expect(Tidy.veryCasual("I think the NHS app on my iPhone is fine. Are you coming?") == "I think the NHS app on my iPhone is fine, are you coming?")
+        #expect(Tidy.veryCasual("I'm in. Great!") == "I'm in, great!")
+    }
+
+    @Test func theStyleIsUsedInTheWholeOrder() {
+        #expect(Tidy.dictation("Sounds good. See you soon.", words: [], british: true, style: .veryCasual).text == "sounds good, see you soon")
+        #expect(Tidy.dictation("Sounds good.", words: [], british: true, style: .casual).text == "sounds good")
+        #expect(Tidy.dictation("Sounds good.", words: [], british: true, casual: true, style: .normal).text == "Sounds good.")
+        #expect(!WritingStyle.asSaid.usesAI && WritingStyle.veryCasual.usesAI)
+    }
+}

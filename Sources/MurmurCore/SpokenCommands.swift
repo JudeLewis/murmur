@@ -72,11 +72,12 @@ extension Tidy {
     /// (async version only), line breaks, the email layout, casual style, and last of
     /// all snippets, so their saved text is never changed.
     public static func dictation(
-        _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false, email: Bool = false
+        _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false, email: Bool = false,
+        style: WritingStyle? = nil
     ) -> Dictation {
         dictation(
             finished: finish(raw, words: words, british: british), words: words, snippets: snippets,
-            british: british, casual: casual, email: email)
+            british: british, casual: casual, email: email, style: style)
     }
 
     /// The same, with the "no wait, I mean" fix (SPEC.md 4.8) after British
@@ -86,7 +87,7 @@ extension Tidy {
         _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
         email: Bool = false, fix: @Sendable (String) async -> String?
     ) async -> Dictation {
-        await dictation(raw, words: words, snippets: snippets, british: british, casual: casual, email: email, fix: fix) { _ in nil }
+        await dictation(raw, words: words, snippets: snippets, british: british, casual: casual, email: email, fix: fix, tidy: { _ in nil })
     }
 
     /// The same, with the AI tidy-up too (SPEC.md 4.11), after spoken punctuation and
@@ -95,7 +96,8 @@ extension Tidy {
     /// Its reply gets British spelling, the word list and the doubled-marks check again.
     public static func dictation(
         _ raw: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
-        email: Bool = false, fix: @Sendable (String) async -> String?, tidy: @Sendable (String) async -> String?
+        email: Bool = false, style: WritingStyle? = nil, fix: @Sendable (String) async -> String?,
+        tidy: @Sendable (String) async -> String?
     ) async -> Dictation {
         var finished = finish(raw, words: words, british: british)
         if let fixed = await fix(finished) { finished = fixed }
@@ -106,18 +108,19 @@ extension Tidy {
             text = WrittenNumbers.apply(to: DoubledMarks.remove(from: finish(tidied, words: WordList.safeToRepeat(words), british: british)))
         }
         return Dictation(
-            text: layout(text, words: words, snippets: snippets, british: british, casual: casual, email: email),
+            text: layout(text, words: words, snippets: snippets, british: british, style: style ?? (casual ? .casual : .normal), email: email),
             pressEnter: pressEnter)
     }
 
-    /// The same, for text that has already been through `finish`.
+    /// The same, for text that has already been through `finish`. `style` wins over `casual` (the
+    /// iPhone's "aa" switch) when given.
     public static func dictation(
         finished: String, words: [WordEntry], snippets: [Snippet] = [], british: Bool, casual: Bool = false,
-        email: Bool = false
+        email: Bool = false, style: WritingStyle? = nil
     ) -> Dictation {
         let (text, pressEnter) = marks(finished, words: words)
         return Dictation(
-            text: layout(text, words: words, snippets: snippets, british: british, casual: casual, email: email),
+            text: layout(text, words: words, snippets: snippets, british: british, style: style ?? (casual ? .casual : .normal), email: email),
             pressEnter: pressEnter)
     }
 
@@ -135,11 +138,15 @@ extension Tidy {
 
     /// Line breaks, the email layout, casual style, then snippets last so their text is never changed.
     static func layout(
-        _ text: String, words: [WordEntry], snippets: [Snippet], british: Bool, casual: Bool, email: Bool
+        _ text: String, words: [WordEntry], snippets: [Snippet], british: Bool, style: WritingStyle, email: Bool
     ) -> String {
         var result = SpokenLists.apply(to: SpokenCommands.lineBreaks(in: text))
         if email { result = EmailLayout.apply(result) }
-        if casual { result = Tidy.casual(result, keeping: words) }
+        switch style {
+        case .casual: result = Tidy.casual(result, keeping: words)
+        case .veryCasual: result = Tidy.veryCasual(result, keeping: words)
+        case .normal, .asSaid: break
+        }
         return Literal.release(Snippets.apply(matching(snippets, words: words, british: british), to: result))
     }
 
